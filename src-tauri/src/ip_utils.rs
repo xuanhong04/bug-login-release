@@ -41,9 +41,11 @@ pub fn is_ipv6(ip: &str) -> bool {
 /// Fetch public IP address, optionally through a proxy.
 pub async fn fetch_public_ip(proxy: Option<&str>) -> Result<String, IpError> {
   let urls = [
+    "https://api64.ipify.org",
     "https://api.ipify.org",
     "https://checkip.amazonaws.com",
     "https://ipinfo.io/ip",
+    "https://ifconfig.me/ip",
     "https://icanhazip.com",
     "https://ifconfig.co/ip",
     "https://ipecho.net/plain",
@@ -67,7 +69,12 @@ pub async fn fetch_public_ip(proxy: Option<&str>) -> Result<String, IpError> {
   let mut last_error = None;
 
   for url in &urls {
-    match client.get(*url).send().await {
+    match client
+      .get(*url)
+      .header("User-Agent", "BugLogin/0.16")
+      .send()
+      .await
+    {
       Ok(response) if response.status().is_success() => match response.text().await {
         Ok(text) => {
           let ip = text.trim().to_string();

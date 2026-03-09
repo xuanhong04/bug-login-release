@@ -4,7 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { GoGlobe, GoPlus } from "react-icons/go";
-import { LuDownload, LuPencil, LuTrash2, LuUpload } from "react-icons/lu";
+import {
+  LuClipboardPaste,
+  LuDownload,
+  LuPencil,
+  LuTrash2,
+  LuUpload,
+} from "react-icons/lu";
 import { toast } from "sonner";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { ProxyExportDialog } from "@/components/proxy-export-dialog";
@@ -400,6 +406,15 @@ export function ProxyManagementDialog({
                     >
                       <LuUpload className="w-4 h-4" />
                       Import
+                    </RippleButton>
+                    <RippleButton
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowImportDialog(true)}
+                      className="flex gap-2 items-center"
+                    >
+                      <LuClipboardPaste className="w-4 h-4" />
+                      Quick Paste
                     </RippleButton>
                     <RippleButton
                       size="sm"

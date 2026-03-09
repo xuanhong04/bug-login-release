@@ -17,8 +17,8 @@ use crate::proxy_manager::PROXY_MANAGER;
 use crate::settings_manager::SettingsManager;
 use crate::sync;
 
-pub const CLOUD_API_URL: &str = "https://api.donutbrowser.com";
-pub const CLOUD_SYNC_URL: &str = "https://sync.donutbrowser.com";
+pub const CLOUD_API_URL: &str = "https://api.buglogin.invalid";
+pub const CLOUD_SYNC_URL: &str = "https://sync.buglogin.invalid";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudUser {
@@ -128,7 +128,7 @@ impl CloudAuthManager {
   }
 
   fn get_vault_password() -> String {
-    env!("DONUT_BROWSER_VAULT_PASSWORD").to_string()
+    env!("BUGLOGIN_VAULT_PASSWORD").to_string()
   }
 
   // --- Encrypted file storage (same pattern as settings_manager.rs) ---
@@ -970,7 +970,8 @@ impl CloudAuthManager {
 
 #[tauri::command]
 pub async fn cloud_request_otp(email: String) -> Result<String, String> {
-  CLOUD_AUTH.request_otp(&email).await
+  let _ = email;
+  Err("Cloud auth is disabled in this BugLogin fork. Use self-hosted sync instead.".to_string())
 }
 
 #[tauri::command]
@@ -979,56 +980,25 @@ pub async fn cloud_verify_otp(
   email: String,
   code: String,
 ) -> Result<CloudAuthState, String> {
-  let state = CLOUD_AUTH.verify_otp(&email, &code).await?;
-
-  let has_subscription = CLOUD_AUTH.has_active_paid_subscription().await;
-  log::info!(
-    "Post-login: plan={}, has_active_subscription={}",
-    state.user.plan,
-    has_subscription
-  );
-
-  // Pre-fetch sync token so sync can start immediately
-  if has_subscription {
-    log::info!("Pre-fetching sync token...");
-    match CLOUD_AUTH.get_or_refresh_sync_token().await {
-      Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
-      Ok(None) => log::warn!("Sync token not available despite active subscription"),
-      Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
-    }
-  }
-
-  // Sync cloud proxy after login
-  CLOUD_AUTH.sync_cloud_proxy().await;
-
-  // Connect team lock manager if on a team plan
-  if state.user.team_id.is_some() {
-    if let Some(tid) = &state.user.team_id {
-      crate::team_lock::TEAM_LOCK.connect(tid).await;
-    }
-  }
-
-  let _ = crate::events::emit_empty("cloud-auth-changed");
-
-  let _ = &app_handle;
-  Ok(state)
+  let _ = app_handle;
+  let _ = email;
+  let _ = code;
+  Err("Cloud auth is disabled in this BugLogin fork. Use self-hosted sync instead.".to_string())
 }
 
 #[tauri::command]
 pub async fn cloud_get_user() -> Result<Option<CloudAuthState>, String> {
-  Ok(CLOUD_AUTH.get_user().await)
+  Ok(None)
 }
 
 #[tauri::command]
 pub async fn cloud_refresh_profile() -> Result<CloudUser, String> {
-  CLOUD_AUTH.fetch_profile().await
+  Err("Cloud auth is disabled in this BugLogin fork.".to_string())
 }
 
 #[tauri::command]
 pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
-  CLOUD_AUTH.logout().await?;
-
-  // Clear sync settings if they point to the cloud URL (prevent leak into Self-Hosted tab)
+  let _ = CLOUD_AUTH.logout().await;
   let manager = crate::settings_manager::SettingsManager::instance();
   if let Ok(sync_settings) = manager.get_sync_settings() {
     if sync_settings.sync_server_url.as_deref() == Some(CLOUD_SYNC_URL) {
@@ -1043,7 +1013,7 @@ pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn cloud_has_active_subscription() -> Result<bool, String> {
-  Ok(CLOUD_AUTH.has_active_paid_subscription().await)
+  Ok(false)
 }
 
 #[tauri::command]

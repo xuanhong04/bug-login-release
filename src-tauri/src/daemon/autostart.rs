@@ -17,8 +17,8 @@ fn get_daemon_path() -> Option<PathBuf> {
   #[cfg(target_os = "macos")]
   {
     let paths = [
-      PathBuf::from("/Applications/Donut Browser.app/Contents/MacOS/donut-daemon"),
-      dirs::home_dir()?.join("Applications/Donut Browser.app/Contents/MacOS/donut-daemon"),
+      PathBuf::from("/Applications/BugLogin.app/Contents/MacOS/buglogin-daemon"),
+      dirs::home_dir()?.join("Applications/BugLogin.app/Contents/MacOS/buglogin-daemon"),
     ];
     for path in paths {
       if path.exists() {
@@ -30,8 +30,8 @@ fn get_daemon_path() -> Option<PathBuf> {
   #[cfg(target_os = "windows")]
   {
     let paths = [
-      dirs::data_local_dir()?.join("Donut Browser/donut-daemon.exe"),
-      PathBuf::from("C:\\Program Files\\Donut Browser\\donut-daemon.exe"),
+      dirs::data_local_dir()?.join("BugLogin/buglogin-daemon.exe"),
+      PathBuf::from("C:\\Program Files\\BugLogin\\buglogin-daemon.exe"),
     ];
     for path in paths {
       if path.exists() {
@@ -43,9 +43,9 @@ fn get_daemon_path() -> Option<PathBuf> {
   #[cfg(target_os = "linux")]
   {
     let paths = [
-      PathBuf::from("/usr/bin/donut-daemon"),
-      PathBuf::from("/usr/local/bin/donut-daemon"),
-      dirs::home_dir()?.join(".local/bin/donut-daemon"),
+      PathBuf::from("/usr/bin/buglogin-daemon"),
+      PathBuf::from("/usr/local/bin/buglogin-daemon"),
+      dirs::home_dir()?.join(".local/bin/buglogin-daemon"),
     ];
     for path in paths {
       if path.exists() {
@@ -60,11 +60,11 @@ fn get_daemon_path() -> Option<PathBuf> {
 fn daemon_binary_name() -> &'static str {
   #[cfg(windows)]
   {
-    "donut-daemon.exe"
+    "buglogin-daemon.exe"
   }
   #[cfg(not(windows))]
   {
-    "donut-daemon"
+    "buglogin-daemon"
   }
 }
 
@@ -79,7 +79,7 @@ pub fn enable_autostart() -> io::Result<()> {
 
   fs::create_dir_all(&plist_dir)?;
 
-  let plist_path = plist_dir.join("com.donutbrowser.daemon.plist");
+  let plist_path = plist_dir.join("com.buglogin.desktop.daemon.plist");
 
   // Get log directory (use data directory instead of /tmp)
   let log_dir = get_data_dir()
@@ -93,7 +93,7 @@ pub fn enable_autostart() -> io::Result<()> {
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.donutbrowser.daemon</string>
+    <string>com.buglogin.desktop.daemon</string>
     <key>ProgramArguments</key>
     <array>
         <string>{daemon_path}</string>
@@ -124,7 +124,7 @@ pub fn enable_autostart() -> io::Result<()> {
 
 #[cfg(target_os = "macos")]
 pub fn get_plist_path() -> Option<PathBuf> {
-  dirs::home_dir().map(|h| h.join("Library/LaunchAgents/com.donutbrowser.daemon.plist"))
+  dirs::home_dir().map(|h| h.join("Library/LaunchAgents/com.buglogin.desktop.daemon.plist"))
 }
 
 #[cfg(target_os = "macos")]
@@ -188,7 +188,7 @@ pub fn start_launch_agent() -> io::Result<()> {
   use std::process::Command;
 
   let output = Command::new("launchctl")
-    .args(["start", "com.donutbrowser.daemon"])
+    .args(["start", "com.buglogin.desktop.daemon"])
     .output()?;
 
   if !output.status.success() {
@@ -242,7 +242,7 @@ pub fn enable_autostart() -> io::Result<()> {
 
   fs::create_dir_all(&autostart_dir)?;
 
-  let desktop_path = autostart_dir.join("donut-daemon.desktop");
+  let desktop_path = autostart_dir.join("buglogin-daemon.desktop");
 
   let escaped_daemon_path = daemon_path
     .display()
@@ -254,7 +254,7 @@ pub fn enable_autostart() -> io::Result<()> {
   let desktop_content = format!(
     r#"[Desktop Entry]
 Type=Application
-Name=Donut Browser Daemon
+Name=BugLogin Daemon
 Exec="{escaped_daemon_path}" run
 Hidden=false
 NoDisplay=true
@@ -272,7 +272,7 @@ X-GNOME-Autostart-enabled=true
 pub fn disable_autostart() -> io::Result<()> {
   let desktop_path = dirs::config_dir()
     .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Config directory not found"))?
-    .join("autostart/donut-daemon.desktop");
+    .join("autostart/buglogin-daemon.desktop");
 
   if desktop_path.exists() {
     fs::remove_file(&desktop_path)?;
@@ -285,7 +285,7 @@ pub fn disable_autostart() -> io::Result<()> {
 #[cfg(target_os = "linux")]
 pub fn is_autostart_enabled() -> bool {
   dirs::config_dir()
-    .map(|c| c.join("autostart/donut-daemon.desktop").exists())
+    .map(|c| c.join("autostart/buglogin-daemon.desktop").exists())
     .unwrap_or(false)
 }
 
@@ -301,7 +301,7 @@ pub fn enable_autostart() -> io::Result<()> {
   let (key, _) = hkcu.create_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run")?;
 
   key.set_value(
-    "DonutBrowserDaemon",
+    "BugLoginDaemon",
     &format!("\"{}\" run", daemon_path.display()),
   )?;
 
@@ -319,7 +319,7 @@ pub fn disable_autostart() -> io::Result<()> {
     "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
     winreg::enums::KEY_WRITE,
   ) {
-    let _ = key.delete_value("DonutBrowserDaemon");
+    let _ = key.delete_value("BugLoginDaemon");
     log::info!("Removed registry autostart entry");
   }
 
@@ -333,16 +333,16 @@ pub fn is_autostart_enabled() -> bool {
 
   let hkcu = RegKey::predef(HKEY_CURRENT_USER);
   if let Ok(key) = hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Run") {
-    key.get_value::<String, _>("DonutBrowserDaemon").is_ok()
+    key.get_value::<String, _>("BugLoginDaemon").is_ok()
   } else {
     false
   }
 }
 
 pub fn get_data_dir() -> Option<PathBuf> {
-  if let Some(proj_dirs) = ProjectDirs::from("com", "donutbrowser", "Donut Browser") {
+  if let Some(proj_dirs) = ProjectDirs::from("com", "buglogin", "BugLogin") {
     Some(proj_dirs.data_dir().to_path_buf())
   } else {
-    dirs::home_dir().map(|h| h.join(".donutbrowser"))
+    dirs::home_dir().map(|h| h.join(".buglogin"))
   }
 }

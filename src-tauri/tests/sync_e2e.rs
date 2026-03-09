@@ -1,4 +1,4 @@
-use donutbrowser_lib::sync::types::*;
+use buglogin_lib::sync::types::*;
 use reqwest::Client;
 use serde_json::json;
 use std::env;

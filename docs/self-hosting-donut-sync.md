@@ -1,6 +1,6 @@
 # Self-Hosting Donut Sync
 
-Donut Sync is the synchronization server for Donut Browser. It allows you to sync your profiles, proxies, and groups across multiple devices. This guide covers how to self-host it using Docker.
+Donut Sync is the synchronization server for BugLogin. It allows you to sync your profiles, proxies, and groups across multiple devices. This guide covers how to self-host it using Docker.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ Donut Sync is the synchronization server for Donut Browser. It allows you to syn
 ```yaml
 services:
   donut-sync:
-    image: donutbrowser/donut-sync:latest
+    image: buglogin/donut-sync:latest
     ports:
       - "3929:3929"
     environment:
@@ -73,7 +73,7 @@ curl http://localhost:3929/readyz
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `SYNC_TOKEN` | Yes | - | Bearer token used to authenticate requests from Donut Browser clients |
+| `SYNC_TOKEN` | Yes | - | Bearer token used to authenticate requests from BugLogin clients |
 | `PORT` | No | `3929` | Port the sync server listens on |
 | `S3_ENDPOINT` | No | - | S3-compatible endpoint URL (e.g., `http://minio:9000` or `https://s3.amazonaws.com`) |
 | `S3_REGION` | No | `us-east-1` | S3 region |
@@ -91,7 +91,7 @@ Instead of running MinIO, you can use any S3-compatible storage service. Remove 
 ```yaml
 services:
   donut-sync:
-    image: donutbrowser/donut-sync:latest
+    image: buglogin/donut-sync:latest
     ports:
       - "3929:3929"
     environment:
@@ -107,7 +107,7 @@ services:
 ```yaml
 services:
   donut-sync:
-    image: donutbrowser/donut-sync:latest
+    image: buglogin/donut-sync:latest
     ports:
       - "3929:3929"
     environment:
@@ -124,9 +124,9 @@ services:
 
 Any service that implements the S3 API (e.g., Backblaze B2, DigitalOcean Spaces, Wasabi) can be used. Set `S3_ENDPOINT` to the service's endpoint URL and `S3_FORCE_PATH_STYLE=true` if required by the provider.
 
-## Configuring the Donut Browser Client
+## Configuring the BugLogin Client
 
-1. Open Donut Browser
+1. Open BugLogin
 2. Click the sync icon in the header to open the Sync Configuration dialog
 3. Enter the **Server URL** (e.g., `http://your-server:3929`)
 4. Enter the **Sync Token** (the value you set for `SYNC_TOKEN`)

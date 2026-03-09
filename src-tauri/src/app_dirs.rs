@@ -10,9 +10,9 @@ fn base_dirs() -> &'static BaseDirs {
 
 pub fn app_name() -> &'static str {
   if cfg!(debug_assertions) {
-    "DonutBrowserDev"
+    "BugLoginDev"
   } else {
-    "DonutBrowser"
+    "BugLogin"
   }
 }
 
@@ -125,8 +125,8 @@ mod tests {
   fn test_app_name() {
     let name = app_name();
     assert!(
-      name == "DonutBrowser" || name == "DonutBrowserDev",
-      "app_name should be DonutBrowser or DonutBrowserDev, got: {name}"
+      name == "BugLogin" || name == "BugLoginDev",
+      "app_name should be BugLogin or BugLoginDev, got: {name}"
     );
   }
 

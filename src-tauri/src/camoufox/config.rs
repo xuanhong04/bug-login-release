@@ -436,12 +436,13 @@ impl CamoufoxConfigBuilder {
     // Handle geolocation if geoip option is set
     if let Some(geoip) = geoip_option {
       let ip = match geoip {
-        GeoIPOption::Auto => {
-          // Fetch public IP, optionally through proxy
-          geolocation::fetch_public_ip(proxy_url.as_deref())
-            .await
-            .map_err(geolocation::GeolocationError::from)?
-        }
+        GeoIPOption::Auto => match geolocation::fetch_public_ip(proxy_url.as_deref()).await {
+          Ok(ip) => ip,
+          Err(error) => {
+            log::warn!("Skipping automatic geolocation because public IP lookup failed: {error}");
+            return Ok(launch_config);
+          }
+        },
         GeoIPOption::IP(ip_str) => {
           if !geolocation::validate_ip(&ip_str) {
             return Err(ConfigError::Geolocation(

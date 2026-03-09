@@ -1,4 +1,4 @@
-// Donut Browser Daemon - Background process for tray icon and services
+// BugLogin daemon - background process for tray icon and services
 // This runs independently of the main Tauri GUI
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -20,7 +20,7 @@ use tray_icon::TrayIcon;
 #[cfg(not(target_os = "macos"))]
 use tray_icon::{MouseButton, TrayIconEvent};
 
-use donutbrowser_lib::daemon::{autostart, services, tray};
+use buglogin_lib::daemon::{autostart, services, tray};
 
 static SHOULD_QUIT: AtomicBool = AtomicBool::new(false);
 
@@ -421,9 +421,9 @@ fn show_status() {
 }
 
 fn print_usage() {
-  eprintln!("Donut Browser Daemon");
+  eprintln!("BugLogin daemon");
   eprintln!();
-  eprintln!("Usage: donut-daemon <command>");
+  eprintln!("Usage: buglogin-daemon <command>");
   eprintln!();
   eprintln!("Commands:");
   eprintln!("  start       Start the daemon (detaches from terminal)");
@@ -459,7 +459,7 @@ fn main() {
     }
     "autostart" => {
       if args.len() < 3 {
-        eprintln!("Usage: donut-daemon autostart <enable|disable|status>");
+        eprintln!("Usage: buglogin-daemon autostart <enable|disable|status>");
         process::exit(1);
       }
       match args[2].as_str() {

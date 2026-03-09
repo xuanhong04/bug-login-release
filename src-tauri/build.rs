@@ -36,11 +36,10 @@ fn main() {
   }
 
   // Inject vault password at build time
-  if let Ok(vault_password) = std::env::var("DONUT_BROWSER_VAULT_PASSWORD") {
-    println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD={vault_password}");
+  if let Ok(vault_password) = std::env::var("BUGLOGIN_VAULT_PASSWORD") {
+    println!("cargo:rustc-env=BUGLOGIN_VAULT_PASSWORD={vault_password}");
   } else {
-    // Use default password if environment variable is not set
-    println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD=donutbrowser-api-vault-password");
+    println!("cargo:rustc-env=BUGLOGIN_VAULT_PASSWORD=buglogin-api-vault-password");
   }
 
   // Tell Cargo to rebuild if the proxy binary source changes
@@ -53,8 +52,8 @@ fn main() {
   // This ensures tauri_build is re-run after sidecar binaries are copied
   println!("cargo:rerun-if-changed=binaries");
 
-  // Only run tauri_build if all external binaries exist
-  // This allows building donut-proxy sidecar without the other binaries present
+  // Only run tauri_build if all external binaries exist.
+  // This allows building the proxy sidecar without the other binaries present.
   if external_binaries_exist() {
     tauri_build::build();
 
@@ -93,19 +92,19 @@ fn external_binaries_exist() -> bool {
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
   // Check for all required external binaries (must match tauri.conf.json externalBin)
-  let (donut_proxy_name, donut_daemon_name) = if target.contains("windows") {
+  let (proxy_name, daemon_name) = if target.contains("windows") {
     (
-      format!("donut-proxy-{}.exe", target),
-      format!("donut-daemon-{}.exe", target),
+      format!("buglogin-proxy-{}.exe", target),
+      format!("buglogin-daemon-{}.exe", target),
     )
   } else {
     (
-      format!("donut-proxy-{}", target),
-      format!("donut-daemon-{}", target),
+      format!("buglogin-proxy-{}", target),
+      format!("buglogin-daemon-{}", target),
     )
   };
 
-  binaries_dir.join(&donut_proxy_name).exists() && binaries_dir.join(&donut_daemon_name).exists()
+  binaries_dir.join(&proxy_name).exists() && binaries_dir.join(&daemon_name).exists()
 }
 
 fn ensure_dist_folder_exists() {

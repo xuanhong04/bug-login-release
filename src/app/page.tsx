@@ -942,10 +942,13 @@ export default function Home() {
         action: {
           label: "Learn more",
           onClick: () => {
-            const event = new CustomEvent("url-open-request", {
-              detail: "https://github.com/zhom/donutbrowser/discussions/66",
+            showToast({
+              type: "success",
+              title: "Migration note",
+              description:
+                "Review migration guidance in your internal BugLogin documentation.",
+              duration: 8000,
             });
-            window.dispatchEvent(event);
           },
         },
       });
@@ -974,10 +977,13 @@ export default function Home() {
         action: {
           label: "Learn more",
           onClick: () => {
-            const event = new CustomEvent("url-open-request", {
-              detail: "https://github.com/zhom/donutbrowser/discussions",
+            showToast({
+              type: "success",
+              title: "Migration note",
+              description:
+                "Review migration guidance in your internal BugLogin documentation.",
+              duration: 8000,
             });
-            window.dispatchEvent(event);
           },
         },
       });

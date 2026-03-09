@@ -99,9 +99,8 @@ copy_binary() {
   fi
 }
 
-# Copy donut-proxy binary
-copy_binary "donut-proxy"
+# Copy proxy binary
+copy_binary "buglogin-proxy"
 
-# Copy donut-daemon binary
-copy_binary "donut-daemon"
-
+# Copy daemon binary
+copy_binary "buglogin-daemon"

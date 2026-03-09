@@ -52,25 +52,13 @@ const HomeHeader = ({
   crossOsUnlocked = false,
 }: Props) => {
   const { t } = useTranslation();
-  const handleLogoClick = () => {
-    // Trigger the same URL handling logic as if the URL came from the system
-    const event = new CustomEvent("url-open-request", {
-      detail: "https://donutbrowser.com",
-    });
-    window.dispatchEvent(event);
-  };
   return (
     <div className="flex justify-between items-center mt-6">
       <div className="flex gap-3 items-center">
-        <button
-          type="button"
-          className="p-1 cursor-pointer"
-          title="Open donutbrowser.com"
-          onClick={handleLogoClick}
-        >
+        <div className="p-1">
           <Logo className="w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110" />
-        </button>
-        <CardTitle>Donut</CardTitle>
+        </div>
+        <CardTitle>BugLogin</CardTitle>
       </div>
       <div className="flex gap-2 items-center">
         <div className="relative">

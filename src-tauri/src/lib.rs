@@ -108,11 +108,6 @@ use auto_updater::{
   check_for_browser_updates, complete_browser_update_with_auto_update, dismiss_update_notification,
 };
 
-use app_auto_updater::{
-  check_for_app_updates, check_for_app_updates_manual, download_and_prepare_app_update,
-  restart_application,
-};
-
 use profile_importer::{detect_existing_profiles, import_browser_profile};
 
 use extension_manager::{
@@ -854,7 +849,7 @@ pub fn run() {
       // Create the main window programmatically
       #[allow(unused_variables)]
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-        .title("Donut Browser")
+        .title("BugLogin")
         .inner_size(800.0, 500.0)
         .resizable(false)
         .fullscreen(false)
@@ -1364,10 +1359,6 @@ pub fn run() {
       check_for_browser_updates,
       dismiss_update_notification,
       complete_browser_update_with_auto_update,
-      check_for_app_updates,
-      check_for_app_updates_manual,
-      download_and_prepare_app_update,
-      restart_application,
       detect_existing_profiles,
       import_browser_profile,
       check_missing_binaries,

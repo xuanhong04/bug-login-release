@@ -74,6 +74,14 @@ export function WindowDragArea() {
     }
   };
 
+  const handleToggleMaximize = async () => {
+    try {
+      await getCurrentWindow().toggleMaximize();
+    } catch (error) {
+      console.error("Failed to toggle maximize:", error);
+    }
+  };
+
   return (
     <div
       className="fixed top-0 right-0 left-0 h-10 z-[999999] flex items-center select-none"
@@ -105,6 +113,24 @@ export function WindowDragArea() {
             aria-label="Minimize"
           >
             <rect width="10" height="1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={handleToggleMaximize}
+          className="flex items-center justify-center w-12 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            role="img"
+            aria-label="Maximize"
+          >
+            <rect x="1.5" y="1.5" width="7" height="7" />
           </svg>
         </button>
         <button

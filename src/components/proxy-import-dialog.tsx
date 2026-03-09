@@ -275,7 +275,8 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         <DialogHeader>
           <DialogTitle>Import Proxies</DialogTitle>
           <DialogDescription>
-            {step === "dropzone" && "Import proxies from a JSON or TXT file"}
+            {step === "dropzone" &&
+              "Import proxies from a JSON/TXT file or paste raw proxy text"}
             {step === "preview" && "Review the proxies to import"}
             {step === "ambiguous" &&
               "Some proxies have ambiguous formats. Please select the correct format."}
@@ -309,9 +310,11 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             >
               <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
-                Drop a proxy config file
+                Drop a proxy config file or paste proxy text
                 <br />
-                <span className="text-xs">(.json, .txt)</span>
+                <span className="text-xs">
+                  (.json, .txt, or {modKey}+V for copied proxy blocks)
+                </span>
               </p>
               <input
                 id="proxy-file-input"

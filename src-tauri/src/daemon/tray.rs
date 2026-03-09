@@ -35,7 +35,7 @@ impl TrayMenu {
   pub fn new() -> Self {
     let menu = Menu::new();
 
-    let quit_item = MenuItem::new("Quit Donut Browser", true, None);
+    let quit_item = MenuItem::new("Quit BugLogin", true, None);
 
     menu.append(&quit_item).unwrap();
 
@@ -46,7 +46,7 @@ impl TrayMenu {
 pub fn create_tray_icon(icon: Icon, menu: &Menu) -> TrayIcon {
   let builder = TrayIconBuilder::new()
     .with_icon(icon)
-    .with_tooltip("Donut Browser")
+    .with_tooltip("BugLogin")
     .with_menu(Box::new(menu.clone()));
 
   // On macOS, template icons are automatically colored by the system for light/dark mode
@@ -57,7 +57,7 @@ pub fn create_tray_icon(icon: Icon, menu: &Menu) -> TrayIcon {
 }
 
 /// Resolve the .app bundle path from the current daemon executable.
-/// In production the daemon is at `Donut.app/Contents/MacOS/donut-daemon`.
+/// In production the daemon is at `BugLogin.app/Contents/MacOS/buglogin-daemon`.
 #[cfg(target_os = "macos")]
 fn get_app_bundle_path() -> Option<std::path::PathBuf> {
   let exe = std::env::current_exe().ok()?;
@@ -82,14 +82,14 @@ pub fn open_gui() {
     // activation machinery. The single-instance Tauri plugin in the GUI
     // handles deduplication if a GUI instance is already running.
     if let Some(app_bundle) = get_app_bundle_path() {
-      let gui_binary = app_bundle.join("Contents").join("MacOS").join("Donut");
+      let gui_binary = app_bundle.join("Contents").join("MacOS").join("BugLogin");
       if gui_binary.exists() {
         let _ = Command::new(&gui_binary).spawn();
       } else {
         let _ = Command::new("open").args(["-n"]).arg(&app_bundle).spawn();
       }
     } else {
-      let _ = Command::new("open").args(["-n", "-a", "Donut"]).spawn();
+      let _ = Command::new("open").args(["-n", "-a", "BugLogin"]).spawn();
     }
   }
 
@@ -99,7 +99,7 @@ pub fn open_gui() {
 
     if let Ok(current_exe) = std::env::current_exe() {
       if let Some(exe_dir) = current_exe.parent() {
-        let app_path = exe_dir.join("donutbrowser.exe");
+        let app_path = exe_dir.join("buglogin.exe");
         if app_path.exists() {
           let _ = Command::new(app_path).spawn();
           return;
@@ -108,10 +108,8 @@ pub fn open_gui() {
     }
 
     let paths = [
-      dirs::data_local_dir().map(|p| p.join("Donut Browser").join("Donut Browser.exe")),
-      Some(PathBuf::from(
-        "C:\\Program Files\\Donut Browser\\Donut Browser.exe",
-      )),
+      dirs::data_local_dir().map(|p| p.join("BugLogin").join("BugLogin.exe")),
+      Some(PathBuf::from("C:\\Program Files\\BugLogin\\BugLogin.exe")),
     ];
 
     for path in paths.iter().flatten() {
@@ -124,7 +122,7 @@ pub fn open_gui() {
 
   #[cfg(target_os = "linux")]
   {
-    let _ = Command::new("donutbrowser").spawn();
+    let _ = Command::new("buglogin").spawn();
   }
 }
 
@@ -179,7 +177,7 @@ pub fn quit_gui() {
     // Use spawn() instead of output() to avoid blocking the event loop.
     // AppleScript has a ~2 minute default timeout that would freeze the tray icon.
     let _ = Command::new("osascript")
-      .args(["-e", "tell application \"Donut\" to quit"])
+      .args(["-e", "tell application \"BugLogin\" to quit"])
       .spawn();
   }
 
@@ -188,17 +186,17 @@ pub fn quit_gui() {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     let _ = Command::new("taskkill")
-      .args(["/IM", "Donut.exe", "/F"])
+      .args(["/IM", "BugLogin.exe", "/F"])
       .creation_flags(CREATE_NO_WINDOW)
       .spawn();
     let _ = Command::new("taskkill")
-      .args(["/IM", "donutbrowser.exe", "/F"])
+      .args(["/IM", "buglogin.exe", "/F"])
       .creation_flags(CREATE_NO_WINDOW)
       .spawn();
   }
 
   #[cfg(target_os = "linux")]
   {
-    let _ = Command::new("pkill").args(["-x", "donutbrowser"]).spawn();
+    let _ = Command::new("pkill").args(["-x", "buglogin"]).spawn();
   }
 }

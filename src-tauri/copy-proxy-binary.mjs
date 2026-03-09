@@ -28,6 +28,8 @@ function getHostTarget() {
 const TARGET = getTarget();
 const HOST_TARGET = getHostTarget();
 const isWindows = TARGET.includes("windows");
+const VCVARS64_PATH =
+  "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat";
 
 // Determine source directory
 let srcDir;
@@ -61,10 +63,19 @@ function copyBinary(baseName) {
       buildArgs.push("--target", TARGET);
     }
 
-    execFileSync("cargo", buildArgs, {
-      cwd: MANIFEST_DIR,
-      stdio: "inherit",
-    });
+    if (isWindows && existsSync(VCVARS64_PATH)) {
+      const cargoCommand = ["cargo", ...buildArgs].join(" ");
+      execSync(`call "${VCVARS64_PATH}" && ${cargoCommand}`, {
+        cwd: MANIFEST_DIR,
+        stdio: "inherit",
+        shell: "cmd.exe",
+      });
+    } else {
+      execFileSync("cargo", buildArgs, {
+        cwd: MANIFEST_DIR,
+        stdio: "inherit",
+      });
+    }
 
     if (existsSync(source)) {
       copyFileSync(source, dest);
@@ -76,5 +87,5 @@ function copyBinary(baseName) {
   }
 }
 
-copyBinary("donut-proxy");
-copyBinary("donut-daemon");
+copyBinary("buglogin-proxy");
+copyBinary("buglogin-daemon");

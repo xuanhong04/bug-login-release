@@ -1,7 +1,7 @@
 /*!
 # App Auto Updater
 
-This module provides comprehensive self-update functionality for the Donut Browser application
+This module provides comprehensive self-update functionality for the BugLogin application
 across multiple operating systems and installation methods.
 
 ## Supported Platforms
@@ -205,7 +205,7 @@ impl AppAutoUpdater {
 
       // Build the release page URL
       let release_page_url = format!(
-        "https://github.com/zhom/donutbrowser/releases/tag/{}",
+        "https://github.com/buglogin/buglogin/releases/tag/{}",
         latest_release.tag_name
       );
 
@@ -272,7 +272,7 @@ impl AppAutoUpdater {
   async fn fetch_app_releases(
     &self,
   ) -> Result<Vec<AppRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    let url = "https://api.github.com/repos/zhom/donutbrowser/releases?per_page=100";
+    let url = "https://api.github.com/repos/buglogin/buglogin/releases?per_page=100";
     let response = self
       .client
       .get(url)
@@ -683,6 +683,7 @@ impl AppAutoUpdater {
   }
 
   /// Download the update file without progress tracking (silent download)
+  #[allow(dead_code)]
   async fn download_update_silent(
     &self,
     download_url: &str,
@@ -718,6 +719,7 @@ impl AppAutoUpdater {
   }
 
   /// Download and prepare app update (silent download + install + notify)
+  #[allow(dead_code)]
   pub async fn download_and_prepare_update(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -875,6 +877,7 @@ impl AppAutoUpdater {
   }
 
   /// Install the update by replacing the current app
+  #[allow(dead_code)]
   async fn install_update(
     &self,
     #[allow(unused_variables)] installer_path: &Path,
@@ -912,18 +915,18 @@ impl AppAutoUpdater {
       // Clean up backup after successful installation
       let _ = fs::remove_dir_all(&backup_path);
 
-      // Clean up old "Donut Browser.app" if it exists (from before the project rename)
+      // Clean up the legacy app bundle if it still exists after a previous rename.
       if let Some(parent_dir) = current_app_path.parent() {
-        let old_app_path = parent_dir.join("Donut Browser.app");
+        let old_app_path = parent_dir.join("BugLogin.app");
         if old_app_path.exists() && old_app_path != current_app_path {
           log::info!(
-            "Removing old 'Donut Browser.app' from: {}",
+            "Removing old 'BugLogin.app' from: {}",
             old_app_path.display()
           );
           if let Err(e) = fs::remove_dir_all(&old_app_path) {
-            log::warn!("Warning: Failed to remove old 'Donut Browser.app': {e}");
+            log::warn!("Warning: Failed to remove old 'BugLogin.app': {e}");
           } else {
-            log::info!("Successfully removed old 'Donut Browser.app'");
+            log::info!("Successfully removed old 'BugLogin.app'");
           }
         }
       }
@@ -1346,6 +1349,7 @@ impl AppAutoUpdater {
   }
 
   /// Get the current application bundle path
+  #[allow(dead_code)]
   fn get_current_app_path(&self) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(target_os = "macos")]
     {
@@ -1383,6 +1387,7 @@ impl AppAutoUpdater {
   }
 
   /// Restart the application
+  #[allow(dead_code)]
   async fn restart_application(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(target_os = "macos")]
     {
@@ -1601,6 +1606,7 @@ rm "{}"
 // Tauri commands
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
   let updater = AppAutoUpdater::instance();
   updater
@@ -1610,6 +1616,7 @@ pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn download_and_prepare_app_update(
   app_handle: tauri::AppHandle,
   update_info: AppUpdateInfo,
@@ -1622,6 +1629,7 @@ pub async fn download_and_prepare_app_update(
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn restart_application() -> Result<(), String> {
   let updater = AppAutoUpdater::instance();
   updater
@@ -1631,6 +1639,7 @@ pub async fn restart_application() -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
   log::info!("Manual app update check triggered");
   let updater = AppAutoUpdater::instance();
@@ -1777,12 +1786,12 @@ mod tests {
       },
       // Linux assets
       AppReleaseAsset {
-        name: "donutbrowser_0.1.0_amd64.deb".to_string(),
+        name: "buglogin_0.1.0_amd64.deb".to_string(),
         browser_download_url: "https://example.com/amd64.deb".to_string(),
         size: 12345,
       },
       AppReleaseAsset {
-        name: "donutbrowser-0.1.0-1.x86_64.rpm".to_string(),
+        name: "buglogin-0.1.0-1.x86_64.rpm".to_string(),
         browser_download_url: "https://example.com/x86_64.rpm".to_string(),
         size: 12345,
       },
@@ -1889,7 +1898,7 @@ mod tests {
     // Create mock assets including AppImage
     let assets = vec![
       AppReleaseAsset {
-        name: "donutbrowser_0.1.0_amd64.deb".to_string(),
+        name: "buglogin_0.1.0_amd64.deb".to_string(),
         browser_download_url: "https://example.com/amd64.deb".to_string(),
         size: 12345,
       },
@@ -1946,7 +1955,7 @@ mod tests {
       },
       // Linux assets
       AppReleaseAsset {
-        name: "donutbrowser_0.1.0_amd64.deb".to_string(),
+        name: "buglogin_0.1.0_amd64.deb".to_string(),
         browser_download_url: "https://example.com/amd64.deb".to_string(),
         size: 12345,
       },

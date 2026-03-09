@@ -2,13 +2,13 @@
 
 ## Reporting Security Issues
 
-Thanks for helping make Donut Browser safe for everyone! ❤️
+Thanks for helping make BugLogin safe for everyone.
 
-We take the security of Donut Browser seriously. If you believe you have found a security vulnerability in Donut Browser, please report it to us through coordinated disclosure.
+We take the security of BugLogin seriously. If you believe you have found a security vulnerability in BugLogin, please report it to us through coordinated disclosure.
 
 **Please do not report security vulnerabilities through public GitHub issues, discussions, or pull requests.**
 
-Instead, please send an email to **[contact@donutbrowser.com](mailto:contact@donutbrowser.com)** with the subject line "Security Vulnerability Report".
+Instead, please send an email to `security@buglogin.local` with the subject line "Security Vulnerability Report".
 
 Please include as much of the information listed below as you can to help us better understand and resolve the issue:
 
@@ -32,9 +32,9 @@ This information will help us triage your report more quickly.
 
 ## Contact
 
-For urgent security matters, please contact us at **[contact@donutbrowser.com](mailto:contact@donutbrowser.com)**.
+For urgent security matters, please contact `security@buglogin.local`.
 
 For general questions about this security policy, you can also reach out through:
 
-- [GitHub Issues](https://github.com/zhom/donutbrowser/issues) (for non-security questions only)
-- [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
+- [GitHub Issues](https://github.com/buglogin/buglogin/issues) (for non-security questions only)
+- [GitHub Discussions](https://github.com/buglogin/buglogin/discussions)
