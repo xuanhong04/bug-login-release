@@ -25,8 +25,6 @@
   </a>
 </p>
 
-<img alt="BugLogin Preview" src="assets/donut-preview.png" />
-
 ## Features
 
 - Create unlimited number of local browser profiles completely isolated from each other
