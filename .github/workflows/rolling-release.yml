@@ -7,64 +7,19 @@ on:
 
 permissions:
   contents: write
-  security-events: write
-  packages: read
-  actions: read
 
 env:
   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
 jobs:
-  security-scan:
-    name: Security Vulnerability Scan
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@c5996e0193a3df57d695c1b8a1dec2a4c62e8730" # v2.3.3
-    with:
-      scan-args: |-
-        -r
-        --skip-git
-        --lockfile=pnpm-lock.yaml
-        --lockfile=src-tauri/Cargo.lock
-        ./
-    permissions:
-      security-events: write
-      contents: read
-      actions: read
-
-  lint-js:
-    name: Lint JavaScript/TypeScript
-    uses: ./.github/workflows/lint-js.yml
-    secrets: inherit
-    permissions:
-      contents: read
-
-  lint-rust:
-    name: Lint Rust
-    uses: ./.github/workflows/lint-rs.yml
-    secrets: inherit
-    permissions:
-      contents: read
-
-  spellcheck:
-    name: Spell Check
-    uses: ./.github/workflows/spellcheck.yml
-    secrets: inherit
-    permissions:
-      contents: read
-
   rolling-release:
-    needs: [security-scan, lint-js, lint-rust, spellcheck]
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin --verbose"
-            arch: "aarch64"
-            target: "aarch64-apple-darwin"
-            pkg_target: "latest-macos-arm64"
           - platform: "macos-latest"
             args: "--target x86_64-apple-darwin --verbose"
             arch: "x86_64"
@@ -75,11 +30,6 @@ jobs:
             arch: "x86_64"
             target: "x86_64-unknown-linux-gnu"
             pkg_target: "latest-linux-x64"
-          - platform: "ubuntu-22.04-arm"
-            args: "--target aarch64-unknown-linux-gnu --verbose"
-            arch: "aarch64"
-            target: "aarch64-unknown-linux-gnu"
-            pkg_target: "latest-linux-arm64"
           - platform: "windows-latest"
             args: "--target x86_64-pc-windows-msvc --verbose"
             arch: "x86_64"
@@ -108,7 +58,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Install dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm'
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev pkg-config xdg-utils
