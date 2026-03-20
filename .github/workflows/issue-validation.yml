@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
       - name: Save issue body to file
         env:
@@ -144,7 +144,7 @@ jobs:
           fi
 
       - name: Run opencode analysis
-        uses: anomalyco/opencode/github@6c7d968c4423a0cd6c85099c9377a6066313fa0a #v1.2.20
+        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
@@ -158,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
         with:
           fetch-depth: 0
 
@@ -273,7 +273,7 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md
 
       - name: Run opencode analysis
-        uses: anomalyco/opencode/github@6c7d968c4423a0cd6c85099c9377a6066313fa0a #v1.2.20
+        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
@@ -292,10 +292,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd #v6.0.2
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@6c7d968c4423a0cd6c85099c9377a6066313fa0a #v1.2.20
+        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
