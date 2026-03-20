@@ -6,12 +6,12 @@
 <br>
 
 <p align="center">
-  <a style="text-decoration: none;" href="https://github.com/buglogin/buglogin/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/buglogin/buglogin">
+  <a style="text-decoration: none;" href="https://github.com/xuanhong04/bug-login-release/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/buglogin/buglogin">
   </a>
-  <a style="text-decoration: none;" href="https://github.com/buglogin/buglogin/issues" target="_blank">
+  <a style="text-decoration: none;" href="https://github.com/xuanhong04/bug-login-release/issues" target="_blank">
     <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs Welcome">
   </a>
-  <a style="text-decoration: none;" href="https://github.com/buglogin/buglogin/blob/main/LICENSE" target="_blank">
+  <a style="text-decoration: none;" href="https://github.com/xuanhong04/bug-login-release/blob/main/LICENSE" target="_blank">
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License">
   </a>
   <a href="https://app.codacy.com/gh/buglogin/buglogin/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade">
@@ -20,7 +20,7 @@
   <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Fbuglogin%2Fbuglogin?ref=badge_shield&issueType=security" alt="FOSSA Status">
     <img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Fbuglogin%2Fbuglogin.svg?type=shield&issueType=security"/>
   </a>
-  <a style="text-decoration: none;" href="https://github.com/buglogin/buglogin/stargazers" target="_blank">
+  <a style="text-decoration: none;" href="https://github.com/xuanhong04/bug-login-release/stargazers" target="_blank">
     <img src="https://img.shields.io/github/stars/buglogin/buglogin?style=social" alt="GitHub stars">
   </a>
 </p>
@@ -38,7 +38,7 @@
 
 > For Linux, .deb and .rpm packages are available as well as standalone .AppImage files.
 
-The app can be downloaded from the [releases page](https://github.com/buglogin/buglogin/releases/latest).
+The app can be downloaded from the [releases page](https://github.com/xuanhong04/bug-login-release/releases/latest).
 
 <details>
 <summary>Troubleshooting AppImage on Linux</summary>
@@ -84,7 +84,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Issues
 
-If you face any problems while using the application, please [open an issue](https://github.com/buglogin/buglogin/issues).
+If you face any problems while using the application, please [open an issue](https://github.com/xuanhong04/bug-login-release/issues).
 
 ## Self-Hosting Sync
 
@@ -94,8 +94,8 @@ BugLogin supports syncing profiles, proxies, and groups across devices via a sel
 
 Have questions or want to contribute? The team would love to hear from you!
 
-- **Issues**: [GitHub Issues](https://github.com/buglogin/buglogin/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/buglogin/buglogin/discussions)
+- **Issues**: [GitHub Issues](https://github.com/xuanhong04/bug-login-release/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/xuanhong04/bug-login-release/discussions)
 
 ## Star History
 

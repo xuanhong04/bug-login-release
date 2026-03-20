@@ -2,7 +2,7 @@
 name = "buglogin"
 version = "0.16.0"
 description = "Simple Yet Powerful Anti-Detect Browser"
-authors = ["zhom@github"]
+authors = ["BugLogin Team <support@buglogin.com>"]
 edition = "2021"
 rust-version = "1.85"
 default-run = "buglogin"
