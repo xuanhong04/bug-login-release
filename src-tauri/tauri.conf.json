@@ -59,10 +59,10 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": "",
       "nsis": {
-        "allowDowngrades": true,
-        "oneClick": true,
-        "perMachine": false,
-        "customPath": "installer.nsh"
+        "allow_downgrades": true,
+        "one_click": true,
+        "per_machine": false,
+        "installer_path": "installer.nsh"
       }
     }
   },
