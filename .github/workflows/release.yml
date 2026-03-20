@@ -151,21 +151,21 @@ jobs:
         shell: bash
         working-directory: ./src-tauri
         run: |
-          cargo build --bin donut-proxy --target ${{ matrix.target }} --release
-          cargo build --bin donut-daemon --target ${{ matrix.target }} --release
+          cargo build --bin buglogin-proxy --target ${{ matrix.target }} --release
+          cargo build --bin buglogin-daemon --target ${{ matrix.target }} --release
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${{ matrix.target }}.exe
-            cp src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe src-tauri/binaries/donut-daemon-${{ matrix.target }}.exe
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-proxy.exe src-tauri/binaries/buglogin-proxy-${{ matrix.target }}.exe
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-daemon.exe src-tauri/binaries/buglogin-daemon-${{ matrix.target }}.exe
           else
-            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            cp src-tauri/target/${{ matrix.target }}/release/donut-daemon src-tauri/binaries/donut-daemon-${{ matrix.target }}
-            chmod +x src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            chmod +x src-tauri/binaries/donut-daemon-${{ matrix.target }}
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-proxy src-tauri/binaries/buglogin-proxy-${{ matrix.target }}
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-daemon src-tauri/binaries/buglogin-daemon-${{ matrix.target }}
+            chmod +x src-tauri/binaries/buglogin-proxy-${{ matrix.target }}
+            chmod +x src-tauri/binaries/buglogin-daemon-${{ matrix.target }}
           fi
 
       - name: Import Apple certificate
@@ -213,7 +213,7 @@ jobs:
         with:
           projectPath: ./src-tauri
           tagName: ${{ github.ref_name }}
-          releaseName: "Donut Browser ${{ github.ref_name }}"
+          releaseName: "BugLogin ${{ github.ref_name }}"
           releaseBody: "See the assets to download this version and install."
           releaseDraft: false
           prerelease: false
@@ -288,8 +288,8 @@ jobs:
             --output-dir /tmp/repo \
             --incremental \
             --arch amd64,arm64 \
-            --origin "Donut Browser" \
-            --label "Donut Browser" \
+            --origin "BugLogin" \
+            --label "BugLogin" \
             --codename stable \
             --components main \
             --verbose

@@ -150,21 +150,21 @@ jobs:
         shell: bash
         working-directory: ./src-tauri
         run: |
-          cargo build --bin donut-proxy --target ${{ matrix.target }} --release
-          cargo build --bin donut-daemon --target ${{ matrix.target }} --release
+          cargo build --bin buglogin-proxy --target ${{ matrix.target }} --release
+          cargo build --bin buglogin-daemon --target ${{ matrix.target }} --release
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${{ matrix.target }}.exe
-            cp src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe src-tauri/binaries/donut-daemon-${{ matrix.target }}.exe
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-proxy.exe src-tauri/binaries/buglogin-proxy-${{ matrix.target }}.exe
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-daemon.exe src-tauri/binaries/buglogin-daemon-${{ matrix.target }}.exe
           else
-            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            cp src-tauri/target/${{ matrix.target }}/release/donut-daemon src-tauri/binaries/donut-daemon-${{ matrix.target }}
-            chmod +x src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            chmod +x src-tauri/binaries/donut-daemon-${{ matrix.target }}
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-proxy src-tauri/binaries/buglogin-proxy-${{ matrix.target }}
+            cp src-tauri/target/${{ matrix.target }}/release/buglogin-daemon src-tauri/binaries/buglogin-daemon-${{ matrix.target }}
+            chmod +x src-tauri/binaries/buglogin-proxy-${{ matrix.target }}
+            chmod +x src-tauri/binaries/buglogin-daemon-${{ matrix.target }}
           fi
 
       - name: Import Apple certificate
@@ -223,7 +223,7 @@ jobs:
         with:
           projectPath: ./src-tauri
           tagName: "nightly-${{ steps.timestamp.outputs.timestamp }}"
-          releaseName: "Donut Browser Nightly (Build ${{ steps.timestamp.outputs.timestamp }})"
+          releaseName: "BugLogin Nightly (Build ${{ steps.timestamp.outputs.timestamp }})"
           releaseBody: "⚠️ **Nightly Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.timestamp.outputs.timestamp }}"
           releaseDraft: false
           prerelease: true
@@ -263,15 +263,15 @@ jobs:
 
           # Rename versioned filenames to stable nightly names
           cd "$ASSETS_DIR"
-          for f in Donut_*_aarch64.dmg; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.dmg; done
-          for f in Donut_*_x64.dmg; do [ -f "$f" ] && mv "$f" Donut_nightly_x64.dmg; done
-          for f in Donut_*_x64-setup.exe; do [ -f "$f" ] && mv "$f" Donut_nightly_x64-setup.exe; done
-          for f in Donut_*_aarch64.AppImage; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.AppImage; done
-          for f in Donut_*_amd64.AppImage; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.AppImage; done
-          for f in Donut_*_amd64.deb; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.deb; done
-          for f in Donut_*_arm64.deb; do [ -f "$f" ] && mv "$f" Donut_nightly_arm64.deb; done
-          for f in Donut-*.x86_64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_x86_64.rpm; done
-          for f in Donut-*.aarch64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.rpm; done
+          for f in BugLogin_*_aarch64.dmg; do [ -f "$f" ] && mv "$f" BugLogin_nightly_aarch64.dmg; done
+          for f in BugLogin_*_x64.dmg; do [ -f "$f" ] && mv "$f" BugLogin_nightly_x64.dmg; done
+          for f in BugLogin_*_x64-setup.exe; do [ -f "$f" ] && mv "$f" BugLogin_nightly_x64-setup.exe; done
+          for f in BugLogin_*_aarch64.AppImage; do [ -f "$f" ] && mv "$f" BugLogin_nightly_aarch64.AppImage; done
+          for f in BugLogin_*_amd64.AppImage; do [ -f "$f" ] && mv "$f" BugLogin_nightly_amd64.AppImage; done
+          for f in BugLogin_*_amd64.deb; do [ -f "$f" ] && mv "$f" BugLogin_nightly_amd64.deb; done
+          for f in BugLogin_*_arm64.deb; do [ -f "$f" ] && mv "$f" BugLogin_nightly_arm64.deb; done
+          for f in BugLogin-*.x86_64.rpm; do [ -f "$f" ] && mv "$f" BugLogin_nightly_x86_64.rpm; done
+          for f in BugLogin-*.aarch64.rpm; do [ -f "$f" ] && mv "$f" BugLogin_nightly_aarch64.rpm; done
           cd "$GITHUB_WORKSPACE"
 
           # Delete existing rolling nightly release and tag
@@ -280,9 +280,9 @@ jobs:
 
           # Create new rolling nightly release with all assets
           gh release create nightly \
-            "$ASSETS_DIR"/Donut_nightly_* \
-            "$ASSETS_DIR"/Donut_aarch64.app.tar.gz \
-            "$ASSETS_DIR"/Donut_x64.app.tar.gz \
-            --title "Donut Browser Nightly" \
+            "$ASSETS_DIR"/BugLogin_nightly_* \
+            "$ASSETS_DIR"/BugLogin_aarch64.app.tar.gz \
+            "$ASSETS_DIR"/BugLogin_x64.app.tar.gz \
+            --title "BugLogin Nightly" \
             --notes "Automatically updated nightly build from the latest main branch.\n\nCommit: ${GITHUB_SHA}" \
             --prerelease
