@@ -1144,6 +1144,33 @@
     "pendingStripe": "Stripe billing is pending configuration.",
     "pendingSync": "Sync service is in local-only mode until S3 sync is configured."
   },
+  "authDialog": {
+    "title": "Cloud Login",
+    "description": "Sign in with email OTP. Optional invite token can be accepted right after login.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "name@company.com",
+    "otpLabel": "OTP Code",
+    "otpPlaceholder": "Enter the 6-digit code",
+    "inviteTokenLabel": "Invite token (optional)",
+    "inviteTokenPlaceholder": "Paste invite token from email link",
+    "sendOtp": "Send OTP",
+    "verifyOtp": "Verify & Login",
+    "resendOtp": "Resend OTP",
+    "back": "Back",
+    "invalidEmail": "Please enter a valid email.",
+    "invalidOtp": "Please enter the OTP code.",
+    "otpRequested": "OTP sent. Check your inbox.",
+    "otpRequestFailed": "Failed to request OTP.",
+    "otpVerifyFailed": "Failed to verify OTP.",
+    "loginSuccess": "Logged in successfully.",
+    "logoutSuccess": "Logged out successfully.",
+    "logoutFailed": "Failed to log out.",
+    "inviteServerMissing": "Sync server URL is required to accept an invite token.",
+    "inviteAccepted": "Invite accepted successfully.",
+    "inviteAcceptFailed": "Logged in, but failed to accept invite token.",
+    "googlePendingTitle": "Google Login Pending",
+    "googlePendingDescription": "Google OAuth is intentionally disabled until backend configuration is ready. Email OTP login remains available."
+  },
   "adminWorkspace": {
     "subtitle": "Platform governance for billing, entitlements, and operational controls.",
     "reasonRequired": "Reason is required for this action.",
@@ -1310,6 +1337,13 @@
     "workspaceHint": "Sidebar-first navigation",
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
+    "auth": {
+      "loggedOut": "Not signed in",
+      "connected": "Cloud account connected",
+      "disconnected": "Cloud account disconnected",
+      "signIn": "Sign in",
+      "signOut": "Sign out"
+    },
     "sections": {
       "profiles": "Profiles",
       "automation": "Automation",

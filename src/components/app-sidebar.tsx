@@ -60,6 +60,11 @@ type Props = {
   onSectionChange: (section: AppSection) => void;
   onCollapsedChange?: (collapsed: boolean) => void;
   showAdminSection?: boolean;
+  authEmail?: string | null;
+  isAuthenticated?: boolean;
+  isAuthBusy?: boolean;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
 };
 
 export function AppSidebar({
@@ -68,6 +73,11 @@ export function AppSidebar({
   onSectionChange,
   onCollapsedChange,
   showAdminSection = false,
+  authEmail = null,
+  isAuthenticated = false,
+  isAuthBusy = false,
+  onSignIn,
+  onSignOut,
 }: Props) {
   const { t } = useTranslation();
   const navItems = showAdminSection ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
@@ -214,15 +224,37 @@ export function AppSidebar({
             <UserRound className="h-4 w-4" />
           </div>
           {!collapsed && (
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[12px] font-semibold text-foreground">
-                {t("shell.workspaceMode")}
+                {authEmail ?? t("shell.auth.loggedOut")}
               </p>
               <p className="text-[11px] font-medium leading-[1.35] text-muted-foreground">
-                {t("shell.workspaceHint")}
+                {isAuthenticated
+                  ? t("shell.auth.connected")
+                  : t("shell.auth.disconnected")}
               </p>
             </div>
           )}
+          {!collapsed &&
+            (isAuthenticated ? (
+              <button
+                type="button"
+                onClick={onSignOut}
+                disabled={isAuthBusy || !onSignOut}
+                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t("shell.auth.signOut")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onSignIn}
+                disabled={isAuthBusy || !onSignIn}
+                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t("shell.auth.signIn")}
+              </button>
+            ))}
         </div>
       </div>
     </aside>

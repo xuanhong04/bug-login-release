@@ -1144,6 +1144,33 @@
     "pendingStripe": "Stripe billing chưa được cấu hình đầy đủ.",
     "pendingSync": "Đang ở chế độ local-only cho tới khi cấu hình S3 sync."
   },
+  "authDialog": {
+    "title": "Đăng nhập Cloud",
+    "description": "Đăng nhập bằng OTP email. Có thể dán invite token để nhận quyền ngay sau khi đăng nhập.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "name@company.com",
+    "otpLabel": "Mã OTP",
+    "otpPlaceholder": "Nhập mã 6 số",
+    "inviteTokenLabel": "Invite token (tuỳ chọn)",
+    "inviteTokenPlaceholder": "Dán token từ link mời trong email",
+    "sendOtp": "Gửi OTP",
+    "verifyOtp": "Xác minh & Đăng nhập",
+    "resendOtp": "Gửi lại OTP",
+    "back": "Quay lại",
+    "invalidEmail": "Vui lòng nhập email hợp lệ.",
+    "invalidOtp": "Vui lòng nhập mã OTP.",
+    "otpRequested": "Đã gửi OTP. Kiểm tra hộp thư của bạn.",
+    "otpRequestFailed": "Không thể gửi OTP.",
+    "otpVerifyFailed": "Không thể xác minh OTP.",
+    "loginSuccess": "Đăng nhập thành công.",
+    "logoutSuccess": "Đăng xuất thành công.",
+    "logoutFailed": "Không thể đăng xuất.",
+    "inviteServerMissing": "Cần cấu hình Sync server URL để chấp nhận invite token.",
+    "inviteAccepted": "Đã chấp nhận invite thành công.",
+    "inviteAcceptFailed": "Đăng nhập thành công nhưng không thể chấp nhận invite token.",
+    "googlePendingTitle": "Google Login đang chờ cấu hình",
+    "googlePendingDescription": "Google OAuth đang tắt có chủ đích cho tới khi backend sẵn sàng. Bạn vẫn có thể dùng OTP email."
+  },
   "adminWorkspace": {
     "subtitle": "Vùng quản trị nền tảng cho billing, entitlement và vận hành.",
     "reasonRequired": "Bắt buộc nhập lý do cho thao tác này.",
@@ -1310,6 +1337,13 @@
     "workspaceHint": "Sidebar ưu tiên các luồng chính",
     "collapseSidebar": "Thu gọn sidebar",
     "expandSidebar": "Mở rộng sidebar",
+    "auth": {
+      "loggedOut": "Chưa đăng nhập",
+      "connected": "Đã kết nối tài khoản cloud",
+      "disconnected": "Chưa kết nối tài khoản cloud",
+      "signIn": "Đăng nhập",
+      "signOut": "Đăng xuất"
+    },
     "sections": {
       "profiles": "Profiles",
       "automation": "Automation",

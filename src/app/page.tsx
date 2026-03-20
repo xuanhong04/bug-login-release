@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
+import { CloudAuthDialog } from "@/components/cloud-auth-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
@@ -127,7 +128,11 @@ export default function Home() {
     isLoading: termsLoading,
     checkTerms,
   } = useWayfernTerms();
-  const { user: cloudUser } = useCloudAuth();
+  const {
+    user: cloudUser,
+    logout: cloudLogout,
+    isLoading: isCloudAuthLoading,
+  } = useCloudAuth();
   const crossOsUnlocked = true;
   const teamRole = normalizeTeamRole(cloudUser?.teamRole);
   const { entitlement, isReadOnly, runtimeConfig } = useRuntimeAccess();
@@ -205,11 +210,23 @@ export default function Home() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [syncConfigDialogOpen, setSyncConfigDialogOpen] = useState(false);
   const [syncAllDialogOpen, setSyncAllDialogOpen] = useState(false);
+  const [cloudAuthDialogOpen, setCloudAuthDialogOpen] = useState(false);
   const [profileSyncDialogOpen, setProfileSyncDialogOpen] = useState(false);
   const [currentProfileForSync, setCurrentProfileForSync] =
     useState<BrowserProfile | null>(null);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
+
+  const handleCloudSignOut = useCallback(async () => {
+    try {
+      await cloudLogout();
+      showSuccessToast(t("authDialog.logoutSuccess"));
+    } catch (error) {
+      showErrorToast(t("authDialog.logoutFailed"), {
+        description: extractRootError(error),
+      });
+    }
+  }, [cloudLogout, t]);
 
   useEffect(() => {
     try {
@@ -1573,6 +1590,13 @@ export default function Home() {
         onSectionChange={setActiveSection}
         onCollapsedChange={setSidebarCollapsed}
         showAdminSection={canAccessAdminWorkspace}
+        authEmail={cloudUser?.email ?? null}
+        isAuthenticated={Boolean(cloudUser)}
+        isAuthBusy={isCloudAuthLoading}
+        onSignIn={() => setCloudAuthDialogOpen(true)}
+        onSignOut={() => {
+          void handleCloudSignOut();
+        }}
       />
 
       <main className="app-shell-safe flex min-w-0 flex-1 flex-col overflow-hidden pl-6 pb-4 md:pl-8 md:pb-6">
@@ -1736,6 +1760,11 @@ export default function Home() {
             setSyncAllDialogOpen(true);
           }
         }}
+      />
+
+      <CloudAuthDialog
+        isOpen={cloudAuthDialogOpen}
+        onClose={() => setCloudAuthDialogOpen(false)}
       />
 
       <SyncAllDialog
