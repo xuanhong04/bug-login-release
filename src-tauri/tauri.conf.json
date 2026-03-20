@@ -57,13 +57,7 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "",
-      "nsis": {
-        "allow_downgrades": true,
-        "one_click": true,
-        "per_machine": false,
-        "installer_path": "installer.nsh"
-      }
+      "timestampUrl": ""
     }
   },
   "plugins": {
