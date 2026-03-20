@@ -123,6 +123,42 @@ export interface CloudAuthState {
   logged_in_at: string;
 }
 
+export interface ControlWorkspace {
+  id: string;
+  name: string;
+  mode: "personal" | "team";
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface ControlWorkspaceOverview {
+  workspaceId: string;
+  members: number;
+  activeInvites: number;
+  activeShareGrants: number;
+  entitlementState: EntitlementState;
+}
+
+export interface ControlMembership {
+  workspaceId: string;
+  userId: string;
+  email: string;
+  role: TeamRole;
+  createdAt: string;
+}
+
+export interface ControlInvite {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: TeamRole;
+  token: string;
+  expiresAt: string;
+  createdAt: string;
+  createdBy: string;
+  consumedAt: string | null;
+}
+
 export interface ProfileSyncStatusEvent {
   profile_id: string;
   status: "disabled" | "syncing" | "synced" | "error" | "pending";

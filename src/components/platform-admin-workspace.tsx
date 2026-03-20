@@ -1,15 +1,31 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { BarChart3, CreditCard, FileText, ShieldCheck, Sliders, Users } from "lucide-react";
+import {
+  BarChart3,
+  CreditCard,
+  FileText,
+  RefreshCcw,
+  ShieldCheck,
+  Sliders,
+  Users,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useControlPlane } from "@/hooks/use-control-plane";
 import type { EntitlementSnapshot, RuntimeConfigStatus } from "@/types";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 interface PlatformAdminWorkspaceProps {
   runtimeConfig: RuntimeConfigStatus | null;
@@ -68,7 +84,29 @@ export function PlatformAdminWorkspace({
 }: PlatformAdminWorkspaceProps) {
   const { t } = useTranslation();
   const [reason, setReason] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [workspaceMode, setWorkspaceMode] = useState<"personal" | "team">(
+    "team",
+  );
   const [isUpdatingEntitlement, setIsUpdatingEntitlement] = useState(false);
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+
+  const {
+    runtime,
+    isLoading,
+    error,
+    workspaces,
+    selectedWorkspaceId,
+    selectedWorkspace,
+    overview,
+    memberships,
+    invites,
+    setSelectedWorkspaceId,
+    refreshRuntime,
+    refreshWorkspaceList,
+    refreshWorkspaceDetails,
+    createWorkspace,
+  } = useControlPlane();
 
   const configSummary = useMemo(() => {
     if (!runtimeConfig) {
@@ -100,6 +138,10 @@ export function PlatformAdminWorkspace({
         ? t("adminWorkspace.status.entitlementGrace")
         : t("adminWorkspace.status.entitlementActive");
 
+  const controlPlaneStatus = runtime.baseUrl
+    ? t("adminWorkspace.controlPlane.connected", { url: runtime.baseUrl })
+    : t("adminWorkspace.controlPlane.pending");
+
   const handleSetEntitlement = async (
     nextState: "active" | "grace_active" | "read_only",
   ) => {
@@ -122,6 +164,26 @@ export function PlatformAdminWorkspace({
     }
   };
 
+  const handleCreateWorkspace = async () => {
+    const nextName = workspaceName.trim();
+    if (!nextName) {
+      showErrorToast(t("adminWorkspace.controlPlane.workspaceNameRequired"));
+      return;
+    }
+
+    try {
+      setIsCreatingWorkspace(true);
+      const created = await createWorkspace(nextName, workspaceMode);
+      setWorkspaceName("");
+      await refreshWorkspaceDetails(created.id);
+      showSuccessToast(t("adminWorkspace.controlPlane.workspaceCreated"));
+    } catch {
+      showErrorToast(t("adminWorkspace.controlPlane.workspaceCreateFailed"));
+    } finally {
+      setIsCreatingWorkspace(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -129,7 +191,7 @@ export function PlatformAdminWorkspace({
           <CardTitle>{t("adminWorkspace.overview.title")}</CardTitle>
           <CardDescription>{t("adminWorkspace.overview.description")}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
+        <CardContent className="grid gap-3 md:grid-cols-4">
           <div className="rounded-md border border-border bg-card p-3">
             <div className="text-xs text-muted-foreground">
               {t("adminWorkspace.overview.configStatus")}
@@ -144,12 +206,189 @@ export function PlatformAdminWorkspace({
           </div>
           <div className="rounded-md border border-border bg-card p-3">
             <div className="text-xs text-muted-foreground">
+              {t("adminWorkspace.overview.controlPlane")}
+            </div>
+            <p className="mt-2 text-sm font-medium text-foreground">{controlPlaneStatus}</p>
+          </div>
+          <div className="rounded-md border border-border bg-card p-3">
+            <div className="text-xs text-muted-foreground">
               {t("adminWorkspace.overview.auditRetention")}
             </div>
             <p className="mt-2 text-sm font-medium text-foreground">
               {t("adminWorkspace.overview.auditRetentionValue")}
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("adminWorkspace.controlPlane.title")}</CardTitle>
+          <CardDescription>{t("adminWorkspace.controlPlane.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                void refreshRuntime();
+                void refreshWorkspaceList();
+              }}
+              disabled={isLoading}
+            >
+              <RefreshCcw className="mr-2 h-4 w-4" />
+              {t("adminWorkspace.controlPlane.refresh")}
+            </Button>
+            {error && (
+              <Badge variant="secondary">{error}</Badge>
+            )}
+          </div>
+
+          {!runtime.baseUrl ? (
+            <div className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {t("adminWorkspace.controlPlane.pendingHelp")}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-[1fr_160px_auto]">
+                <Input
+                  value={workspaceName}
+                  onChange={(event) => {
+                    setWorkspaceName(event.target.value);
+                  }}
+                  placeholder={t("adminWorkspace.controlPlane.workspaceNamePlaceholder")}
+                />
+                <Select
+                  value={workspaceMode}
+                  onValueChange={(value) => {
+                    setWorkspaceMode(value as "personal" | "team");
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="team">{t("adminWorkspace.controlPlane.modeTeam")}</SelectItem>
+                    <SelectItem value="personal">{t("adminWorkspace.controlPlane.modePersonal")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  disabled={isCreatingWorkspace}
+                  onClick={() => {
+                    void handleCreateWorkspace();
+                  }}
+                >
+                  {t("adminWorkspace.controlPlane.createWorkspace")}
+                </Button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2 rounded-md border border-border bg-card p-3">
+                  <div className="text-xs text-muted-foreground">
+                    {t("adminWorkspace.controlPlane.workspaceList")}
+                  </div>
+                  <Select
+                    value={selectedWorkspaceId ?? undefined}
+                    onValueChange={(value) => {
+                      setSelectedWorkspaceId(value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={t("adminWorkspace.controlPlane.workspaceSelectPlaceholder")}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workspaces.map((workspace) => (
+                        <SelectItem key={workspace.id} value={workspace.id}>
+                          {workspace.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t("adminWorkspace.controlPlane.workspaceCount", {
+                      count: workspaces.length,
+                    })}
+                  </p>
+                </div>
+
+                <div className="space-y-2 rounded-md border border-border bg-card p-3">
+                  <div className="text-xs text-muted-foreground">
+                    {t("adminWorkspace.controlPlane.workspaceDetails")}
+                  </div>
+                  {selectedWorkspace && overview ? (
+                    <div className="space-y-1 text-sm text-foreground">
+                      <p>
+                        {t("adminWorkspace.controlPlane.modeLabel")}: {selectedWorkspace.mode}
+                      </p>
+                      <p>
+                        {t("adminWorkspace.controlPlane.memberCount", {
+                          count: overview.members,
+                        })}
+                      </p>
+                      <p>
+                        {t("adminWorkspace.controlPlane.inviteCount", {
+                          count: overview.activeInvites,
+                        })}
+                      </p>
+                      <p>
+                        {t("adminWorkspace.controlPlane.shareCount", {
+                          count: overview.activeShareGrants,
+                        })}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t("adminWorkspace.controlPlane.noWorkspaceSelected")}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-md border border-border bg-card p-3">
+                  <div className="mb-2 text-xs text-muted-foreground">
+                    {t("adminWorkspace.controlPlane.members")}
+                  </div>
+                  <div className="space-y-1 text-xs text-foreground">
+                    {memberships.length === 0 ? (
+                      <p className="text-muted-foreground">
+                        {t("adminWorkspace.controlPlane.noMembers")}
+                      </p>
+                    ) : (
+                      memberships.slice(0, 8).map((member) => (
+                        <p key={member.userId}>
+                          {member.email} • {member.role}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border bg-card p-3">
+                  <div className="mb-2 text-xs text-muted-foreground">
+                    {t("adminWorkspace.controlPlane.invites")}
+                  </div>
+                  <div className="space-y-1 text-xs text-foreground">
+                    {invites.length === 0 ? (
+                      <p className="text-muted-foreground">
+                        {t("adminWorkspace.controlPlane.noInvites")}
+                      </p>
+                    ) : (
+                      invites.slice(0, 8).map((invite) => (
+                        <p key={invite.id}>
+                          {invite.email} • {invite.role}
+                        </p>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
