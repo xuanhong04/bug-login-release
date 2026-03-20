@@ -42,8 +42,6 @@ pub struct AppSettings {
   #[serde(default)]
   pub first_launch_timestamp: Option<u64>, // Unix epoch seconds when app was first launched
   #[serde(default)]
-  pub commercial_trial_acknowledged: bool, // Has user dismissed the trial expiration modal
-  #[serde(default)]
   pub mcp_enabled: bool, // Enable MCP (Model Context Protocol) server
   #[serde(default)]
   pub mcp_port: Option<u16>, // Port for MCP server (default 51080)
@@ -61,6 +59,12 @@ pub struct AppSettings {
 pub struct SyncSettings {
   pub sync_server_url: Option<String>,
   pub sync_token: Option<String>, // Only populated when reading, not stored in JSON
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct AppAccessTokenState {
+  pub configured: bool,
+  pub enforcement_enabled: bool,
 }
 
 fn default_theme() -> String {
@@ -82,7 +86,6 @@ impl Default for AppSettings {
       api_token: None,
       sync_server_url: None,
       first_launch_timestamp: None,
-      commercial_trial_acknowledged: false,
       mcp_enabled: false,
       mcp_port: None,
       mcp_token: None,
@@ -188,7 +191,7 @@ impl SettingsManager {
   }
 
   fn get_vault_password() -> String {
-    env!("BUGLOGIN_VAULT_PASSWORD").to_string()
+    crate::vault_password::get_vault_password().to_string()
   }
 
   pub async fn generate_api_token(
@@ -677,6 +680,145 @@ impl SettingsManager {
     Ok(())
   }
 
+  pub async fn store_app_access_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    token: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("app_access_token.dat");
+
+    if let Some(parent) = token_file.parent() {
+      std::fs::create_dir_all(parent)?;
+    }
+
+    let vault_password = Self::get_vault_password();
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+      .encrypt(&nonce, token.as_bytes())
+      .map_err(|e| format!("Encryption failed: {e}"))?;
+
+    let mut file_data = Vec::new();
+    file_data.extend_from_slice(b"DBATK"); // 5-byte header for app access token
+    file_data.push(2u8); // Version 2 (Argon2 + AES-GCM)
+    let salt_str = salt.as_str();
+    file_data.push(salt_str.len() as u8);
+    file_data.extend_from_slice(salt_str.as_bytes());
+    file_data.extend_from_slice(&nonce);
+    file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
+    file_data.extend_from_slice(&ciphertext);
+
+    std::fs::write(token_file, file_data)?;
+    Ok(())
+  }
+
+  pub async fn get_app_access_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("app_access_token.dat");
+
+    if !token_file.exists() {
+      return Ok(None);
+    }
+
+    let file_data = std::fs::read(token_file)?;
+
+    if file_data.len() < 6 || &file_data[0..5] != b"DBATK" {
+      return Ok(None);
+    }
+
+    let version = file_data[5];
+    if version != 2 {
+      return Ok(None);
+    }
+
+    let mut offset = 6;
+    if offset >= file_data.len() {
+      return Ok(None);
+    }
+    let salt_len = file_data[offset] as usize;
+    offset += 1;
+
+    if offset + salt_len > file_data.len() {
+      return Ok(None);
+    }
+    let salt_bytes = &file_data[offset..offset + salt_len];
+    let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
+    let salt = SaltString::from_b64(salt_str).map_err(|_| "Invalid salt format")?;
+    offset += salt_len;
+
+    if offset + 12 > file_data.len() {
+      return Ok(None);
+    }
+    let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
+      .try_into()
+      .map_err(|_| "Invalid nonce length")?;
+    let nonce = Nonce::from(nonce_bytes);
+    offset += 12;
+
+    if offset + 4 > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext_len = u32::from_le_bytes([
+      file_data[offset],
+      file_data[offset + 1],
+      file_data[offset + 2],
+      file_data[offset + 3],
+    ]) as usize;
+    offset += 4;
+
+    if offset + ciphertext_len > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext = &file_data[offset..offset + ciphertext_len];
+
+    let vault_password = Self::get_vault_password();
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let plaintext = cipher
+      .decrypt(&nonce, ciphertext)
+      .map_err(|_| "Decryption failed")?;
+
+    match String::from_utf8(plaintext) {
+      Ok(token) => Ok(Some(token)),
+      Err(_) => Ok(None),
+    }
+  }
+
+  pub async fn remove_app_access_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("app_access_token.dat");
+
+    if token_file.exists() {
+      std::fs::remove_file(token_file)?;
+    }
+
+    Ok(())
+  }
+
   pub fn get_sync_settings(&self) -> Result<SyncSettings, Box<dyn std::error::Error>> {
     let settings = self.load_settings()?;
     Ok(SyncSettings {
@@ -885,6 +1027,52 @@ pub async fn save_sync_settings(
 }
 
 #[tauri::command]
+pub async fn get_app_access_token_state(
+  app_handle: tauri::AppHandle,
+) -> Result<AppAccessTokenState, String> {
+  let manager = SettingsManager::instance();
+  let token = manager
+    .get_app_access_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to load app access token: {e}"))?;
+
+  Ok(AppAccessTokenState {
+    configured: token.is_some(),
+    enforcement_enabled: false,
+  })
+}
+
+#[tauri::command]
+pub async fn save_app_access_token(
+  app_handle: tauri::AppHandle,
+  token: Option<String>,
+) -> Result<AppAccessTokenState, String> {
+  let manager = SettingsManager::instance();
+  match token {
+    Some(value) if !value.trim().is_empty() => {
+      manager
+        .store_app_access_token(&app_handle, value.trim())
+        .await
+        .map_err(|e| format!("Failed to store app access token: {e}"))?;
+      Ok(AppAccessTokenState {
+        configured: true,
+        enforcement_enabled: false,
+      })
+    }
+    _ => {
+      manager
+        .remove_app_access_token(&app_handle)
+        .await
+        .map_err(|e| format!("Failed to remove app access token: {e}"))?;
+      Ok(AppAccessTokenState {
+        configured: false,
+        enforcement_enabled: false,
+      })
+    }
+  }
+}
+
+#[tauri::command]
 pub async fn dismiss_window_resize_warning() -> Result<(), String> {
   let manager = SettingsManager::instance();
   let mut settings = manager
@@ -1000,7 +1188,6 @@ mod tests {
       api_token: None,
       sync_server_url: None,
       first_launch_timestamp: None,
-      commercial_trial_acknowledged: false,
       mcp_enabled: false,
       mcp_port: None,
       mcp_token: None,

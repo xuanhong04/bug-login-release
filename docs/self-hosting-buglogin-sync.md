@@ -1,6 +1,6 @@
-# Self-Hosting Donut Sync
+# Self-Hosting BugLogin Sync
 
-Donut Sync is the synchronization server for BugLogin. It allows you to sync your profiles, proxies, and groups across multiple devices. This guide covers how to self-host it using Docker.
+BugLogin Sync is the synchronization server for BugLogin. It allows you to sync your profiles, proxies, and groups across multiple devices. This guide covers how to self-host it using Docker.
 
 ## Prerequisites
 
@@ -13,8 +13,8 @@ Donut Sync is the synchronization server for BugLogin. It allows you to sync you
 
 ```yaml
 services:
-  donut-sync:
-    image: buglogin/donut-sync:latest
+  buglogin-sync:
+    image: buglogin/buglogin-sync:latest
     ports:
       - "3929:3929"
     environment:
@@ -24,7 +24,7 @@ services:
       - S3_REGION=us-east-1
       - S3_ACCESS_KEY_ID=minioadmin
       - S3_SECRET_ACCESS_KEY=minioadmin
-      - S3_BUCKET=donut-sync
+      - S3_BUCKET=buglogin-sync
       - S3_FORCE_PATH_STYLE=true
     depends_on:
       minio:
@@ -79,7 +79,7 @@ curl http://localhost:3929/readyz
 | `S3_REGION` | No | `us-east-1` | S3 region |
 | `S3_ACCESS_KEY_ID` | Yes | - | S3 access key |
 | `S3_SECRET_ACCESS_KEY` | Yes | - | S3 secret key |
-| `S3_BUCKET` | No | `donut-sync` | S3 bucket name for storing sync data |
+| `S3_BUCKET` | No | `buglogin-sync` | S3 bucket name for storing sync data |
 | `S3_FORCE_PATH_STYLE` | No | `false` | Set to `true` for MinIO and other S3-compatible services that use path-style URLs |
 
 ## Using External S3 Storage
@@ -90,8 +90,8 @@ Instead of running MinIO, you can use any S3-compatible storage service. Remove 
 
 ```yaml
 services:
-  donut-sync:
-    image: buglogin/donut-sync:latest
+  buglogin-sync:
+    image: buglogin/buglogin-sync:latest
     ports:
       - "3929:3929"
     environment:
@@ -106,8 +106,8 @@ services:
 
 ```yaml
 services:
-  donut-sync:
-    image: buglogin/donut-sync:latest
+  buglogin-sync:
+    image: buglogin/buglogin-sync:latest
     ports:
       - "3929:3929"
     environment:
@@ -144,7 +144,7 @@ Once configured, you can enable sync on individual profiles, proxies, and groups
 ## Security Considerations
 
 - **Use a strong `SYNC_TOKEN`**: Generate a random token (e.g., `openssl rand -hex 32`) and keep it secret.
-- **HTTPS**: In production, place a reverse proxy (e.g., Nginx, Caddy, Traefik) in front of Donut Sync to terminate TLS. The sync token is sent as a Bearer token in the `Authorization` header and should not be transmitted over plain HTTP.
+- **HTTPS**: In production, place a reverse proxy (e.g., Nginx, Caddy, Traefik) in front of BugLogin Sync to terminate TLS. The sync token is sent as a Bearer token in the `Authorization` header and should not be transmitted over plain HTTP.
 - **Network isolation**: If running on a VPS, consider restricting access to the sync port using firewall rules or binding only to localhost behind a reverse proxy.
 - **S3 credentials**: Use dedicated IAM credentials with minimal permissions (read/write to the sync bucket only).
 

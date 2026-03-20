@@ -2,10 +2,94 @@ use crate::proxy_storage::{
   delete_proxy_config, generate_proxy_id, get_proxy_config, is_process_running, list_proxy_configs,
   save_proxy_config, ProxyConfig,
 };
+use std::path::PathBuf;
 use std::process::Stdio;
 lazy_static::lazy_static! {
   static ref PROXY_PROCESSES: std::sync::Mutex<std::collections::HashMap<String, u32>> =
     std::sync::Mutex::new(std::collections::HashMap::new());
+}
+
+fn resolve_proxy_worker_executable() -> Result<PathBuf, Box<dyn std::error::Error>> {
+  let current_exe = std::env::current_exe()?;
+  let current_dir = current_exe
+    .parent()
+    .ok_or("Failed to resolve current exe dir")?;
+  let target = std::env::var("TARGET").unwrap_or_else(|_| {
+    std::process::Command::new("rustc")
+      .args(["-vV"])
+      .output()
+      .ok()
+      .and_then(|out| {
+        if out.status.success() {
+          String::from_utf8(out.stdout).ok().and_then(|text| {
+            text
+              .lines()
+              .find_map(|line| line.strip_prefix("host: ").map(|v| v.trim().to_string()))
+          })
+        } else {
+          None
+        }
+      })
+      .unwrap_or_else(|| "unknown".to_string())
+  });
+
+  #[cfg(windows)]
+  let bin_name = "buglogin-proxy.exe";
+  #[cfg(not(windows))]
+  let bin_name = "buglogin-proxy";
+
+  #[cfg(windows)]
+  let sidecar_name = format!("buglogin-proxy-{target}.exe");
+  #[cfg(not(windows))]
+  let sidecar_name = format!("buglogin-proxy-{target}");
+
+  let mut candidates = vec![
+    current_dir.join(bin_name),
+    current_dir.join("binaries").join(&sidecar_name),
+  ];
+
+  if let Some(parent) = current_dir.parent() {
+    candidates.push(parent.join("binaries").join(&sidecar_name));
+  }
+
+  if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+    let manifest_path = PathBuf::from(manifest_dir);
+    let profile_dir = if cfg!(debug_assertions) {
+      "debug"
+    } else {
+      "release"
+    };
+    candidates.push(
+      manifest_path
+        .join("target")
+        .join(target)
+        .join(profile_dir)
+        .join(bin_name),
+    );
+    candidates.push(
+      manifest_path
+        .join("target")
+        .join(profile_dir)
+        .join(bin_name),
+    );
+    candidates.push(manifest_path.join("binaries").join(&sidecar_name));
+  }
+
+  if let Some(found) = candidates.iter().find(|candidate| candidate.exists()) {
+    return Ok(found.clone());
+  }
+
+  Err(
+    format!(
+      "Failed to locate buglogin-proxy executable. Checked: {}",
+      candidates
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+    )
+    .into(),
+  )
 }
 
 pub async fn start_proxy_process(
@@ -45,14 +129,14 @@ pub async fn start_proxy_process_with_profile(
 
   // Spawn proxy worker process in the background using std::process::Command
   // This ensures proper process detachment on Unix systems
-  let exe = std::env::current_exe()?;
+  let worker_exe = resolve_proxy_worker_executable()?;
 
   #[cfg(unix)]
   {
     use std::os::unix::process::CommandExt;
     use std::process::Command as StdCommand;
 
-    let mut cmd = StdCommand::new(&exe);
+    let mut cmd = StdCommand::new(&worker_exe);
     cmd.arg("proxy-worker");
     cmd.arg("start");
     cmd.arg("--id");
@@ -129,7 +213,7 @@ pub async fn start_proxy_process_with_profile(
       }
     }
 
-    let mut cmd = StdCommand::new(&exe);
+    let mut cmd = StdCommand::new(&worker_exe);
     cmd.arg("proxy-worker");
     cmd.arg("start");
     cmd.arg("--id");

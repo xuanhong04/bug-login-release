@@ -173,6 +173,8 @@ impl GeoIPDownloader {
     fs::create_dir_all(&cache_dir).await?;
 
     let mmdb_path = Self::get_mmdb_file_path()?;
+    let temp_path = mmdb_path.with_extension("mmdb.downloading");
+    let _ = fs::remove_file(&temp_path).await;
 
     // Download the file
     let response = self.client.get(&download_url).send().await?;
@@ -189,7 +191,7 @@ impl GeoIPDownloader {
 
     let total_size = response.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
-    let mut file = fs::File::create(&mmdb_path).await?;
+    let mut file = fs::File::create(&temp_path).await?;
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
@@ -237,6 +239,9 @@ impl GeoIPDownloader {
     }
 
     file.flush().await?;
+
+    // Replace old DB only after successful full download.
+    fs::rename(&temp_path, &mmdb_path).await?;
 
     // Write download timestamp
     let timestamp_path = Self::get_timestamp_path();

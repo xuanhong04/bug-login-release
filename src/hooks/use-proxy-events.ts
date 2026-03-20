@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { extractRootError } from "@/lib/error-utils";
 import type { StoredProxy } from "@/types";
 
 /**
@@ -40,7 +41,7 @@ export function useProxyEvents() {
       setError(null);
     } catch (err: unknown) {
       console.error("Failed to load proxies:", err);
-      setError(`Failed to load proxies: ${JSON.stringify(err)}`);
+      setError(`Failed to load proxies: ${extractRootError(err)}`);
     }
   }, [loadProxyUsage]);
 
@@ -84,7 +85,7 @@ export function useProxyEvents() {
       } catch (err) {
         console.error("Failed to setup proxy event listeners:", err);
         setError(
-          `Failed to setup proxy event listeners: ${JSON.stringify(err)}`,
+          `Failed to setup proxy event listeners: ${extractRootError(err)}`,
         );
       } finally {
         setIsLoading(false);

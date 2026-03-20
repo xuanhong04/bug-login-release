@@ -11,7 +11,16 @@ NC='\033[0m' # No Color
 # Get the root directory of the project
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-SYNC_DIR="$ROOT_DIR/donut-sync"
+SYNC_DIR_CANDIDATE_NEW="$ROOT_DIR/buglogin-sync"
+SYNC_DIR_CANDIDATE_LEGACY="$ROOT_DIR/donut-sync"
+if [ -d "$SYNC_DIR_CANDIDATE_NEW" ]; then
+  SYNC_DIR="$SYNC_DIR_CANDIDATE_NEW"
+elif [ -d "$SYNC_DIR_CANDIDATE_LEGACY" ]; then
+  SYNC_DIR="$SYNC_DIR_CANDIDATE_LEGACY"
+else
+  echo -e "${RED}Error: neither buglogin-sync nor donut-sync directory exists${NC}"
+  exit 1
+fi
 
 # Track PIDs for cleanup
 SYNC_PID=""

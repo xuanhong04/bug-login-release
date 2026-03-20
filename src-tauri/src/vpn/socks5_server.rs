@@ -610,7 +610,7 @@ impl WireGuardSocks5Server {
 
       // Timer ticks for WireGuard keepalives
       timer_counter += 1;
-      if timer_counter.is_multiple_of(500) {
+      if timer_counter % 500 == 0 {
         device.tick_timers();
       }
 

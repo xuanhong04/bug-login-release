@@ -1,5 +1,6 @@
 packages:
   - nodecar
+  - buglogin-sync
   - donut-sync
 
 onlyBuiltDependencies:

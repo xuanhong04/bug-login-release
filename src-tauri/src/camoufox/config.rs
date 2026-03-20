@@ -329,12 +329,7 @@ impl CamoufoxConfigBuilder {
     // Convert fingerprint to config
     let mut config = from_browserforge(&fingerprint, self.ff_version);
 
-    // Add random window history length
     let mut rng = rand::rng();
-    config.insert(
-      "window.history.length".to_string(),
-      serde_json::json!(rng.random_range(1..=5)),
-    );
 
     // Add fonts
     if !self.custom_fonts_only {

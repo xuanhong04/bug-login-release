@@ -2,7 +2,7 @@ mod common;
 use common::TestUtils;
 use serde_json::Value;
 use serial_test::serial;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::sleep;
@@ -53,6 +53,7 @@ async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + 
     .parent()
     .unwrap()
     .to_path_buf();
+  let build_profile = if cfg!(windows) { "release" } else { "debug" };
 
   // Build the proxy sidecar if it doesn't exist.
   let proxy_binary_name = if cfg!(windows) {
@@ -63,13 +64,19 @@ async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + 
   let proxy_binary = project_root
     .join("src-tauri")
     .join("target")
-    .join("debug")
+    .join(build_profile)
     .join(proxy_binary_name);
 
   if !proxy_binary.exists() {
     println!("Building buglogin-proxy binary for integration tests...");
+    let mut build_args = vec!["build"];
+    if cfg!(windows) {
+      build_args.push("--release");
+    }
+    build_args.extend(["--bin", "buglogin-proxy"]);
+
     let build_status = std::process::Command::new("cargo")
-      .args(["build", "--bin", "buglogin-proxy"])
+      .args(build_args)
       .current_dir(project_root.join("src-tauri"))
       .status()?;
 
@@ -86,6 +93,27 @@ async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + 
   let _ = TestUtils::execute_command(&proxy_binary, &["proxy", "stop"]).await;
 
   Ok(proxy_binary)
+}
+
+async fn wait_for_port_ready(
+  port: u16,
+  timeout: Duration,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let started_at = Instant::now();
+  let detail = loop {
+    match TcpStream::connect(("127.0.0.1", port)).await {
+      Ok(_) => return Ok(()),
+      Err(error) => {
+        if started_at.elapsed() >= timeout {
+          break error.to_string();
+        }
+      }
+    }
+
+    sleep(Duration::from_millis(120)).await;
+  };
+
+  Err(format!("port {port} is not ready after {timeout:?}: {detail}").into())
 }
 
 /// Helper to track and cleanup proxy processes
@@ -219,12 +247,9 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
 
   println!("First proxy started on port {}", proxy1_port);
 
-  // Wait for first proxy to be ready
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", proxy1_port)).await {
-    Ok(_) => println!("First proxy is ready"),
-    Err(e) => return Err(format!("First proxy not ready: {e}").into()),
-  }
+  // Wait for first proxy to be ready.
+  wait_for_port_ready(proxy1_port, Duration::from_secs(6)).await?;
+  println!("First proxy is ready");
 
   // Start second proxy chained to first proxy
   let output2 = TestUtils::execute_command(
@@ -260,12 +285,9 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
     proxy2_port, proxy1_port
   );
 
-  // Wait for second proxy to be ready
-  sleep(Duration::from_millis(500)).await;
-  match TcpStream::connect(("127.0.0.1", proxy2_port)).await {
-    Ok(_) => println!("Second proxy is ready"),
-    Err(e) => return Err(format!("Second proxy not ready: {e}").into()),
-  }
+  // Wait for second proxy to be ready.
+  wait_for_port_ready(proxy2_port, Duration::from_secs(6)).await?;
+  println!("Second proxy is ready");
 
   // Test making an HTTP request through the chained proxy
   let mut stream = TcpStream::connect(("127.0.0.1", proxy2_port)).await?;
@@ -726,7 +748,7 @@ async fn test_bypass_rules_http_direct() -> Result<(), Box<dyn std::error::Error
   let local_port = config["localPort"].as_u64().unwrap() as u16;
   tracker.track_proxy(proxy_id.clone());
 
-  println!("Donut-proxy started on port {local_port} with bypass rules for 127.0.0.1");
+  println!("buglogin-proxy started on port {local_port} with bypass rules for 127.0.0.1");
 
   sleep(Duration::from_millis(500)).await;
 

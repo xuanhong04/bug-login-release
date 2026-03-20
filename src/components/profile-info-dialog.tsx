@@ -5,6 +5,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import {
+  LuArchive,
   LuChevronRight,
   LuClipboard,
   LuClipboardCheck,
@@ -13,9 +14,11 @@ import {
   LuFingerprint,
   LuGlobe,
   LuGroup,
+  LuPin,
   LuPlus,
   LuPuzzle,
   LuRefreshCw,
+  LuRotateCcw,
   LuSettings,
   LuShieldCheck,
   LuTrash2,
@@ -65,6 +68,12 @@ interface ProfileInfoDialogProps {
   onOpenBypassRules?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onDeleteProfile?: (profile: BrowserProfile) => void;
+  onArchiveProfile?: (profile: BrowserProfile) => void;
+  onRestoreProfile?: (profile: BrowserProfile) => void;
+  onPinProfile?: (profile: BrowserProfile) => void;
+  onUnpinProfile?: (profile: BrowserProfile) => void;
+  isArchived?: boolean;
+  isPinned?: boolean;
   crossOsUnlocked?: boolean;
   isRunning?: boolean;
   isDisabled?: boolean;
@@ -110,6 +119,12 @@ export function ProfileInfoDialog({
   onOpenBypassRules,
   onCloneProfile,
   onDeleteProfile,
+  onArchiveProfile,
+  onRestoreProfile,
+  onPinProfile,
+  onUnpinProfile,
+  isArchived = false,
+  isPinned = false,
   crossOsUnlocked = false,
   isRunning = false,
   isDisabled = false,
@@ -297,6 +312,34 @@ export function ProfileInfoDialog({
       disabled: isDeleteDisabled,
       destructive: true,
     },
+    {
+      icon: <LuPin className="w-4 h-4" />,
+      label: isPinned ? t("profiles.actions.unpin") : t("profiles.actions.pin"),
+      onClick: () =>
+        handleAction(() =>
+          isPinned ? onUnpinProfile?.(profile) : onPinProfile?.(profile),
+        ),
+      disabled: isDisabled,
+      hidden: !(onPinProfile && onUnpinProfile),
+    },
+    {
+      icon: isArchived ? (
+        <LuRotateCcw className="w-4 h-4" />
+      ) : (
+        <LuArchive className="w-4 h-4" />
+      ),
+      label: isArchived
+        ? t("profiles.actions.restore")
+        : t("profiles.actions.archive"),
+      onClick: () =>
+        handleAction(() =>
+          isArchived
+            ? onRestoreProfile?.(profile)
+            : onArchiveProfile?.(profile),
+        ),
+      disabled: isDisabled,
+      hidden: !(onArchiveProfile && onRestoreProfile),
+    },
   ];
 
   const visibleActions = actions.filter((a) => !a.hidden);
@@ -317,7 +360,7 @@ export function ProfileInfoDialog({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="info">
-            <div className="overflow-y-auto max-h-[calc(80vh-12rem)] pr-1">
+            <ScrollArea className="max-h-[calc(80vh-12rem)]">
               <div className="flex flex-col gap-4 py-3">
                 {/* Hero */}
                 <div className="flex items-center gap-3">
@@ -467,10 +510,10 @@ export function ProfileInfoDialog({
                   </div>
                 )}
               </div>
-            </div>
+            </ScrollArea>
           </TabsContent>
           <TabsContent value="settings">
-            <div className="overflow-y-auto max-h-[calc(80vh-12rem)]">
+            <ScrollArea className="max-h-[calc(80vh-12rem)]">
               <div className="flex flex-col py-1">
                 {visibleActions.map((action) => (
                   <button
@@ -494,7 +537,7 @@ export function ProfileInfoDialog({
                   </button>
                 ))}
               </div>
-            </div>
+            </ScrollArea>
           </TabsContent>
         </Tabs>
       </DialogContent>

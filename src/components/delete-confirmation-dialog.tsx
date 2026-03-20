@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoadingButton } from "./loading-button";
 import { RippleButton } from "./ui/ripple";
 
@@ -49,7 +50,7 @@ export function DeleteConfirmationDialog({
               <p className="text-sm font-medium mb-2">
                 Profiles to be deleted:
               </p>
-              <div className="bg-muted rounded-md p-3 max-h-32 overflow-y-auto">
+              <ScrollArea className="bg-muted rounded-md p-3 max-h-32">
                 <ul className="space-y-1">
                   {profileIds.map((id) => {
                     const profile = profiles.find((p) => p.id === id);
@@ -61,7 +62,7 @@ export function DeleteConfirmationDialog({
                     );
                   })}
                 </ul>
-              </div>
+              </ScrollArea>
             </div>
           )}
         </DialogHeader>

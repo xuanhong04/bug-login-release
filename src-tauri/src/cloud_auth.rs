@@ -17,8 +17,19 @@ use crate::proxy_manager::PROXY_MANAGER;
 use crate::settings_manager::SettingsManager;
 use crate::sync;
 
-pub const CLOUD_API_URL: &str = "https://api.buglogin.invalid";
-pub const CLOUD_SYNC_URL: &str = "https://sync.buglogin.invalid";
+// CLOUD_API_URL and CLOUD_SYNC_URL are runtime-configurable via app_config.
+// They default to kmediaz.com but can be overridden via settings/buglogin-config.json.
+lazy_static! {
+  /// Public lazy_static for external consumers (e.g. team_lock.rs).
+  pub static ref CLOUD_API_URL: String = crate::app_config::get().cloud_api_url.clone();
+  pub static ref CLOUD_SYNC_URL: String = crate::app_config::get().cloud_sync_url.clone();
+}
+
+/// Private shorthand for use in `format!()` macros within this module.
+#[inline(always)]
+fn api_url() -> &'static str {
+  crate::app_config::cloud_api_url()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudUser {
@@ -128,7 +139,7 @@ impl CloudAuthManager {
   }
 
   fn get_vault_password() -> String {
-    env!("BUGLOGIN_VAULT_PASSWORD").to_string()
+    crate::vault_password::get_vault_password().to_string()
   }
 
   // --- Encrypted file storage (same pattern as settings_manager.rs) ---
@@ -353,7 +364,7 @@ impl CloudAuthManager {
   // --- API methods ---
 
   pub async fn request_otp(&self, email: &str) -> Result<String, String> {
-    let url = format!("{CLOUD_API_URL}/api/auth/otp/request");
+    let url = format!("{}/api/auth/otp/request", api_url());
     let response = self
       .client
       .post(&url)
@@ -377,7 +388,7 @@ impl CloudAuthManager {
   }
 
   pub async fn verify_otp(&self, email: &str, code: &str) -> Result<CloudAuthState, String> {
-    let url = format!("{CLOUD_API_URL}/api/auth/otp/verify");
+    let url = format!("{}/api/auth/otp/verify", api_url());
     let response = self
       .client
       .post(&url)
@@ -457,7 +468,7 @@ impl CloudAuthManager {
     let refresh_token =
       Self::load_refresh_token()?.ok_or_else(|| "No refresh token stored".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/auth/token/refresh");
+    let url = format!("{}/api/auth/token/refresh", api_url());
     let response = self
       .client
       .post(&url)
@@ -498,7 +509,7 @@ impl CloudAuthManager {
   pub async fn fetch_profile(&self) -> Result<CloudUser, String> {
     let user = self
       .api_call_with_retry(|access_token| {
-        let url = format!("{CLOUD_API_URL}/api/auth/me");
+        let url = format!("{}/api/auth/me", api_url());
         let client = self.client.clone();
         async move {
           let response = client
@@ -547,7 +558,7 @@ impl CloudAuthManager {
     // Fetch new sync token
     let sync_token = self
       .api_call_with_retry(|access_token| {
-        let url = format!("{CLOUD_API_URL}/api/auth/sync-token");
+        let url = format!("{}/api/auth/sync-token", api_url());
         let client = self.client.clone();
         async move {
           let response = client
@@ -584,7 +595,7 @@ impl CloudAuthManager {
     // Try to call the logout API (best-effort)
     if let Ok(Some(access_token)) = Self::load_access_token() {
       let refresh_token = Self::load_refresh_token().ok().flatten();
-      let url = format!("{CLOUD_API_URL}/api/auth/logout");
+      let url = format!("{}/api/auth/logout", api_url());
       let mut body = serde_json::json!({});
       if let Some(rt) = &refresh_token {
         body = serde_json::json!({ "refreshToken": rt });
@@ -708,7 +719,7 @@ impl CloudAuthManager {
 
     match self
       .api_call_with_retry(|access_token| {
-        let url = format!("{CLOUD_API_URL}/api/proxy/config");
+        let url = format!("{}/api/proxy/config", api_url());
         let client = self.client.clone();
         async move {
           let response = client
@@ -788,7 +799,7 @@ impl CloudAuthManager {
   pub async fn report_sync_profile_count(&self, count: i64) -> Result<(), String> {
     self
       .api_call_with_retry(|access_token| {
-        let url = format!("{CLOUD_API_URL}/api/auth/sync-profile-usage");
+        let url = format!("{}/api/auth/sync-profile-usage", api_url());
         let client = reqwest::Client::new();
         async move {
           let response = client
@@ -815,7 +826,7 @@ impl CloudAuthManager {
   pub async fn fetch_countries(&self) -> Result<Vec<LocationItem>, String> {
     self
       .api_call_with_retry(|access_token| {
-        let url = format!("{CLOUD_API_URL}/api/proxy/locations/countries");
+        let url = format!("{}/api/proxy/locations/countries", api_url());
         let client = self.client.clone();
         async move {
           let response = client
@@ -846,7 +857,8 @@ impl CloudAuthManager {
     self
       .api_call_with_retry(move |access_token| {
         let url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/states?country={}",
+          "{}/api/proxy/locations/states?country={}",
+          api_url(),
           country
         );
         let client = reqwest::Client::new();
@@ -884,8 +896,10 @@ impl CloudAuthManager {
     self
       .api_call_with_retry(move |access_token| {
         let url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/cities?country={}&state={}",
-          country, state
+          "{}/api/proxy/locations/cities?country={}&state={}",
+          api_url(),
+          country,
+          state
         );
         let client = reqwest::Client::new();
         async move {
@@ -1001,7 +1015,7 @@ pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
   let _ = CLOUD_AUTH.logout().await;
   let manager = crate::settings_manager::SettingsManager::instance();
   if let Ok(sync_settings) = manager.get_sync_settings() {
-    if sync_settings.sync_server_url.as_deref() == Some(CLOUD_SYNC_URL) {
+    if sync_settings.sync_server_url.as_deref() == Some(CLOUD_SYNC_URL.as_str()) {
       let _ = manager.save_sync_server_url(None);
     }
   }

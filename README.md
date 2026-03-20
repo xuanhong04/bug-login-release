@@ -65,13 +65,30 @@ If that gives an EGL display error, try adding `WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### Runtime Rule (Windows vs WSL)
+
+- Do not share the same `node_modules` across Windows PowerShell and WSL/Linux.
+- Install dependencies and run Tauri commands in the same runtime.
+- `pnpm dev`, `pnpm tauri ...`, `pnpm format`, `pnpm lint`, and `pnpm test` are guarded by `scripts/guard-node-modules-runtime.mjs` and stop when runtime artifacts are mixed.
+- If you get a guard error, reinstall dependencies in your current runtime:
+  - Windows: `Remove-Item -Recurse -Force node_modules && pnpm config set shell-emulator true && pnpm install`
+  - WSL/Linux: `rm -rf node_modules && pnpm install`
+
+### Agent Workflow Rule
+
+- Full verification is conditional. Run `pnpm format && pnpm lint && pnpm test` for high-risk changes, pre-merge/release, or when explicitly requested.
+- During active `pnpm tauri dev` sessions, defer heavy lint/test unless explicitly requested to avoid long recompiles or interruptions.
+- Non-trivial workflow changes should be tracked via `openspec/` and `docs/workflow/beads/`.
+- Superpowers usage guide: `docs/workflow/superpowers/README.md`.
+- Workflow hub (single entrypoint): `docs/workflow/README.md`.
+
 ## Issues
 
 If you face any problems while using the application, please [open an issue](https://github.com/buglogin/buglogin/issues).
 
 ## Self-Hosting Sync
 
-BugLogin supports syncing profiles, proxies, and groups across devices via a self-hosted sync server. See the [Self-Hosting Guide](docs/self-hosting-donut-sync.md) for Docker-based setup instructions.
+BugLogin supports syncing profiles, proxies, and groups across devices via a self-hosted sync server. See the [Self-Hosting Guide](docs/self-hosting-buglogin-sync.md) for Docker-based setup instructions.
 
 ## Community
 

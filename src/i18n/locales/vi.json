@@ -1,0 +1,1197 @@
+{
+  "common": {
+    "buttons": {
+      "save": "Lưu",
+      "cancel": "Hủy",
+      "close": "Đóng",
+      "delete": "Xóa",
+      "create": "Tạo",
+      "back": "Quay lại",
+      "retry": "Thử lại",
+      "download": "Tải xuống",
+      "confirm": "Xác nhận",
+      "apply": "Áp dụng",
+      "reset": "Đặt lại",
+      "add": "Thêm",
+      "edit": "Chỉnh sửa",
+      "copy": "Sao chép",
+      "clear": "Xóa",
+      "search": "Tìm kiếm",
+      "select": "Chọn",
+      "grant": "Cấp quyền",
+      "start": "Bắt đầu",
+      "stop": "Dừng",
+      "enable": "Bật",
+      "disable": "Tắt",
+      "import": "Nhập",
+      "export": "Xuất",
+      "refresh": "Làm mới",
+      "loading": "Đang tải...",
+      "saveSettings": "Lưu cài đặt"
+    },
+    "status": {
+      "active": "Đang hoạt động",
+      "inactive": "Không hoạt động",
+      "running": "Đang chạy",
+      "stopped": "Đã dừng",
+      "enabled": "Đã bật",
+      "disabled": "Đã tắt",
+      "granted": "Đã cấp",
+      "notGranted": "Chưa cấp",
+      "connected": "Đã kết nối",
+      "disconnected": "Đã ngắt kết nối",
+      "synced": "Đã đồng bộ",
+      "syncing": "Đang đồng bộ",
+      "pending": "Đang chờ",
+      "error": "Lỗi"
+    },
+    "labels": {
+      "name": "Tên",
+      "type": "Loại",
+      "status": "Trạng thái",
+      "actions": "Thao tác",
+      "description": "Mô tả",
+      "none": "Không có",
+      "default": "Mặc định",
+      "custom": "Tùy chỉnh",
+      "optional": "Tùy chọn",
+      "required": "Bắt buộc"
+    },
+    "time": {
+      "days": "ngày",
+      "hours": "giờ",
+      "minutes": "phút",
+      "seconds": "giây",
+      "remaining": "còn lại"
+    }
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "appearance": {
+      "title": "Giao diện",
+      "theme": "Chủ đề",
+      "themeDescription": "Chọn giao diện bạn muốn dùng hoặc để ứng dụng tự theo cài đặt hệ thống. Các thay đổi màu tùy biến chỉ được áp dụng sau khi bấm Lưu.",
+      "themePreset": "Preset giao diện",
+      "customColors": "Màu tùy biến",
+      "selectTheme": "Chọn chủ đề",
+      "selectThemePreset": "Chọn preset giao diện",
+      "yourOwn": "Tự tùy biến",
+      "light": "Sáng",
+      "dark": "Tối",
+      "system": "Hệ thống"
+    },
+    "language": {
+      "title": "Ngôn ngữ",
+      "description": "Chọn ngôn ngữ bạn muốn dùng cho giao diện ứng dụng.",
+      "systemDefault": "Mặc định hệ thống",
+      "selectLanguage": "Chọn ngôn ngữ"
+    },
+    "defaultBrowser": {
+      "title": "Trình duyệt mặc định",
+      "setAsDefault": "Đặt làm trình duyệt mặc định",
+      "alreadyDefault": "Đã là trình duyệt mặc định",
+      "description": "Khi đặt làm mặc định, BugLogin sẽ mở các liên kết web và cho phép bạn chọn profile muốn dùng."
+    },
+    "permissions": {
+      "title": "Quyền hệ thống",
+      "loading": "Đang tải quyền...",
+      "description": "Các quyền này cho phép trình duyệt được mở từ BugLogin truy cập tài nguyên hệ thống. Từng website vẫn sẽ xin quyền riêng khi cần.",
+      "microphone": "Microphone",
+      "microphoneDescription": "Cho phép trình duyệt truy cập microphone",
+      "camera": "Camera",
+      "cameraDescription": "Cho phép trình duyệt truy cập camera"
+    },
+    "integrations": {
+      "title": "Tích hợp",
+      "description": "Cấu hình Local API và MCP (Model Context Protocol) để kết nối BugLogin với công cụ bên ngoài và trợ lý AI.",
+      "openSettings": "Mở cài đặt tích hợp"
+    },
+    "encryption": {
+      "title": "Mã hóa Sync",
+      "description": "Đặt mật khẩu để bật sync mã hóa đầu cuối (E2E). Nếu quên mật khẩu này, bạn sẽ không thể khôi phục các profile đã mã hóa.",
+      "passwordSet": "Đã bật",
+      "passwordSetDescription": "Mật khẩu E2E đã được thiết lập",
+      "noPassword": "Chưa thiết lập mật khẩu",
+      "passwordPlaceholder": "Mật khẩu (tối thiểu 8 ký tự)",
+      "confirmPlaceholder": "Xác nhận mật khẩu",
+      "setPassword": "Đặt mật khẩu",
+      "changePassword": "Đổi mật khẩu",
+      "removePassword": "Xóa mật khẩu",
+      "removed": "Đã xóa mật khẩu mã hóa",
+      "passwordSaved": "Đã lưu mật khẩu mã hóa",
+      "passwordMismatch": "Mật khẩu không khớp",
+      "passwordTooShort": "Mật khẩu phải có ít nhất 8 ký tự",
+      "requiresProOrOwner": "Mã hóa Profile chỉ dành cho người dùng Pro và chủ sở hữu team."
+    },
+    "commercial": {
+      "title": "Giấy phép thương mại",
+      "trialActive": "Dùng thử: còn {{days}} ngày, {{hours}} giờ",
+      "trialActiveDescription": "Được dùng thương mại miễn phí trong thời gian trial",
+      "trialExpired": "Đã hết hạn dùng thử",
+      "trialExpiredDescription": "Vẫn miễn phí cho nhu cầu cá nhân. Muốn dùng thương mại cần có license."
+    },
+    "advanced": {
+      "title": "Nâng cao",
+      "clearCache": "Xóa cache version",
+      "clearCacheDescription": "Xóa toàn bộ dữ liệu cache version của trình duyệt và tải lại thông tin version mới từ nguồn."
+    }
+  },
+  "header": {
+    "searchPlaceholder": "Tìm profile...",
+    "clearSearch": "Xóa tìm kiếm",
+    "moreActions": "Thao tác khác",
+    "createProfile": "Tạo profile mới",
+    "menu": {
+      "settings": "Cài đặt",
+      "proxies": "Proxy & VPN",
+      "groups": "Nhóm",
+      "syncService": "Tài khoản",
+      "integrations": "Tích hợp",
+      "importProfile": "Import profile",
+      "extensions": "Extensions",
+      "automation": "Automation Workspace"
+    },
+    "savedViews": {
+      "title": "Saved views",
+      "saveCurrent": "Save current view",
+      "empty": "No saved view yet",
+      "nothingToSave": "Add a search or group filter before saving a view",
+      "defaultName": "View",
+      "saved": "Saved view created",
+      "applied": "Saved view applied",
+      "deleted": "Saved view deleted",
+      "notFound": "Saved view not found",
+      "showArchived": "Show archived profiles",
+      "showActive": "Show active profiles",
+      "showPinnedOnly": "Chỉ hiện profile đã ghim",
+      "showAllProfiles": "Hiện tất cả profile"
+    }
+  },
+  "profiles": {
+    "title": "Profiles",
+    "empty": "Chưa có profile nào",
+    "emptyDescription": "Tạo profile trình duyệt đầu tiên để bắt đầu.",
+    "createFirst": "Tạo profile",
+    "noResults": "Không tìm thấy profile",
+    "noResultsDescription": "Không có profile nào khớp với bộ lọc hiện tại.",
+    "table": {
+      "name": "Tên",
+      "browser": "Trình duyệt",
+      "status": "Trạng thái",
+      "actions": "Thao tác",
+      "note": "Ghi chú",
+      "tags": "Nhãn",
+      "group": "Nhóm",
+      "proxy": "Proxy / VPN",
+      "lastLaunch": "Lần mở gần nhất",
+      "noTags": "Chưa có nhãn",
+      "addTags": "Thêm nhãn",
+      "noNote": "Không có ghi chú",
+      "notePlaceholder": "Thêm ghi chú...",
+      "proxySearch": "Tìm proxy hoặc VPN...",
+      "proxySearchWithCountries": "Tìm proxy, VPN hoặc quốc gia...",
+      "proxyEmpty": "Không tìm thấy proxy hoặc VPN.",
+      "none": "Không",
+      "vpns": "VPN",
+      "createByCountry": "Tạo theo quốc gia",
+      "profileInfo": "Thông tin profile",
+      "selectAll": "Chọn tất cả",
+      "selectRow": "Chọn dòng",
+      "selectProfile": "Chọn profile",
+      "cannotModifyRunning": "Không thể chỉnh sửa profile đang chạy",
+      "cannotModifyLaunching": "Không thể chỉnh sửa profile khi đang khởi chạy",
+      "cannotModifyStopping": "Không thể chỉnh sửa profile khi đang dừng",
+      "cannotModifyUpdating": "Không thể chỉnh sửa profile khi trình duyệt đang cập nhật",
+      "syncing": "Đang đồng bộ...",
+      "waitingToSync": "Đang chờ đồng bộ",
+      "syncedAt": "Đã đồng bộ {{time}}",
+      "syncError": "Lỗi đồng bộ",
+      "syncErrorWithMessage": "Lỗi đồng bộ: {{message}}",
+      "syncDisabledLastSync": "Đã tắt đồng bộ, lần gần nhất {{time}}",
+      "deleteProfileTitle": "Xóa profile",
+      "deleteProfileDescription": "Hành động này không thể hoàn tác. Profile \"{{name}}\" và toàn bộ dữ liệu liên quan sẽ bị xóa vĩnh viễn.",
+      "assignProxy": "Gán Proxy",
+      "assignExtensionGroup": "Gán nhóm tiện ích",
+      "assignExtensionGroupPro": "Gán nhóm tiện ích (Pro)"
+    },
+    "actions": {
+      "launch": "Mở",
+      "resume": "Tiếp tục",
+      "stop": "Dừng",
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa",
+      "copyCookies": "Copy cookie",
+      "configure": "Cấu hình",
+      "clone": "Clone profile",
+      "viewNetwork": "Xem mạng",
+      "syncSettings": "Cài đặt sync",
+      "assignToGroup": "Gán vào nhóm",
+      "changeFingerprint": "Đổi fingerprint",
+      "copyCookiesToProfile": "Copy cookie sang profile",
+      "archive": "Archive",
+      "restore": "Restore",
+      "archiveSuccess": "Profile archived",
+      "restoreSuccess": "Profile restored",
+      "pin": "Ghim",
+      "unpin": "Bỏ ghim",
+      "pinSuccess": "Đã ghim profile",
+      "unpinSuccess": "Đã bỏ ghim profile"
+    },
+    "ephemeral": "Ephemeral",
+    "ephemeralDescription": "Trình duyệt sẽ lưu dữ liệu profile trên bộ nhớ thay vì ổ đĩa. Dữ liệu sẽ bị xóa khi đóng trình duyệt.",
+    "ephemeralBadge": "Ephemeral",
+    "ephemeralAlpha": "Alpha"
+  },
+  "createProfile": {
+    "title": "Tạo profile mới",
+    "configureTitle": "Cấu hình profile",
+    "antiDetect": {
+      "title": "Browser anti-detect",
+      "description": "Chọn trình duyệt có khả năng chống nhận diện",
+      "chromium": "Wayfern",
+      "firefox": "Camoufox",
+      "badge": "Anti-detect"
+    },
+    "regular": {
+      "title": "Trình duyệt thông thường",
+      "description": "Chọn từ các trình duyệt tiêu chuẩn được hỗ trợ",
+      "badge": "Trình duyệt tiêu chuẩn"
+    },
+    "profileName": "Tên profile",
+    "profileNamePlaceholder": "Nhập tên profile",
+    "launchAfterCreate": "Launch browser after create",
+    "sections": {
+      "basic": "Cơ bản",
+      "proxy": "Proxy",
+      "advanced": "Nâng cao",
+      "basicHint": "Đặt tên profile và các thiết lập cơ bản cần thiết.",
+      "proxyHint": "Chọn proxy có sẵn hoặc quick add proxy mới.",
+      "advancedHint": "Cấu hình anti-detect nâng cao và tùy chọn mở rộng."
+    },
+    "proxy": {
+      "title": "Proxy / VPN",
+      "addProxy": "Thêm proxy",
+      "noProxy": "Không dùng proxy / VPN",
+      "noProxiesAvailable": "Chưa có proxy hoặc VPN nào. Thêm một mục để định tuyến lưu lượng cho profile này.",
+      "check": "Check Proxy",
+      "autoSaveHint": "Proxy will be saved automatically when creating this profile.",
+      "modeQuick": "Quick add",
+      "modeExisting": "Proxy sẵn",
+      "modeManual": "Manual",
+      "modeHint": {
+        "quick": "Dán host:port:user:pass rồi bấm Parse.",
+        "existing": "Tìm và lọc proxy đã lưu theo trạng thái đang dùng/chưa dùng trước khi chọn.",
+        "manual": "Nhập thủ công khi proxy không parse được hoặc cần chỉnh chi tiết."
+      },
+      "searchPlaceholder": "Tìm theo tên, host hoặc cổng...",
+      "filterAll": "Tất cả",
+      "filterUsed": "Đang dùng",
+      "filterUnused": "Chưa dùng",
+      "statusUsed": "Đang dùng",
+      "statusUnused": "Chưa dùng",
+      "emptyFiltered": "Không có proxy nào khớp bộ lọc hiện tại."
+    },
+    "version": {
+      "fetching": "Đang tải danh sách version...",
+      "fetchError": "Không thể tải danh sách version trình duyệt. Vui lòng kiểm tra kết nối mạng và thử lại.",
+      "needsDownload": "{{browser}} {{version}} cần được tải về",
+      "available": "{{browser}} {{version}} đã sẵn sàng",
+      "downloading": "Đang tải {{browser}} {{version}}...",
+      "latestNeedsDownload": "Version mới nhất ({{version}}) cần được tải về",
+      "latestAvailable": "Version mới nhất ({{version}}) đã sẵn sàng",
+      "latestDownloading": "Đang tải version {{version}}..."
+    }
+  },
+  "deleteDialog": {
+    "title": "Xóa profile",
+    "description": "Bạn có chắc muốn xóa profile này không? Thao tác này không thể hoàn tác.",
+    "profilesTitle": "Xóa các profile",
+    "profilesDescription": "Bạn có chắc muốn xóa các profile đã chọn không? Thao tác này không thể hoàn tác.",
+    "profilesToDelete": "Các profile sẽ bị xóa:"
+  },
+  "proxies": {
+    "title": "Proxy",
+    "management": "Proxy & VPN",
+    "add": "Thêm proxy",
+    "edit": "Sửa proxy",
+    "delete": "Xóa proxy",
+    "import": "Nhập",
+    "export": "Xuất",
+    "noProxies": "Chưa cấu hình proxy nào",
+    "noProxiesDescription": "Thêm proxy để định tuyến lưu lượng trình duyệt qua đó.",
+    "form": {
+      "name": "Tên",
+      "namePlaceholder": "Nhập tên proxy",
+      "type": "Loại",
+      "host": "Host",
+      "hostPlaceholder": "proxy.example.com",
+      "port": "Cổng",
+      "portPlaceholder": "8080",
+      "username": "Username",
+      "usernamePlaceholder": "Tùy chọn",
+      "password": "Mật khẩu",
+      "passwordPlaceholder": "Tùy chọn",
+      "manualTab": "Manual",
+      "validation": {
+        "nameRequired": "Tên proxy là bắt buộc",
+        "hostPortRequired": "Host và cổng là bắt buộc"
+      },
+      "messages": {
+        "created": "Đã tạo proxy thành công",
+        "updated": "Đã cập nhật proxy thành công",
+        "saveFailed": "Không thể lưu proxy: {{error}}"
+      },
+      "quickAdd": {
+        "tab": "Quick Add",
+        "label": "Quick add proxy",
+        "namePrefix": "Tiền tố tên",
+        "namePrefixPlaceholder": "Imported",
+        "placeholder": "Dán proxy vào đây.\nCác định dạng hỗ trợ:\nhttp://user:pass@host:port\nhost:port:user:pass\nuser:pass:host:port\nhost port user pass\nIP: host\nHTTP Port: 8080\nUsername: user\nPassword: pass",
+        "description": "Dán một hoặc nhiều proxy. BugLogin sẽ tự nhận diện các định dạng phổ biến và import mọi mục hợp lệ.",
+        "submit": "Import proxy",
+        "validation": {
+          "empty": "Hãy dán ít nhất một proxy",
+          "noValid": "Không tìm thấy proxy hợp lệ. Có {{count}} mục cần kiểm tra thủ công."
+        },
+        "messages": {
+          "imported": "Đã import {{count}} proxy.",
+          "ambiguous": "Đã bỏ qua {{count}} mục không nhận diện được định dạng.",
+          "invalid": "Đã bỏ qua {{count}} mục không hợp lệ.",
+          "errors": "Có {{count}} mục lưu thất bại.",
+          "importFailed": "Không thể import proxy: {{error}}"
+        },
+        "singlePlaceholder": "host:port:user:pass or http://user:pass@host:port",
+        "parse": "Parse",
+        "parseSuccess": "Proxy parsed successfully.",
+        "parseFailed": "Failed to parse proxy input."
+      },
+      "check": "Check Proxy",
+      "autoType": {
+        "button": "Auto best type",
+        "applied": "Best protocol selected: {{protocol}}",
+        "unavailable": "Could not determine best proxy protocol.",
+        "failed": "Failed to benchmark proxy protocols."
+      }
+    },
+    "types": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "socks4": "SOCKS4",
+      "socks5": "SOCKS5"
+    },
+    "check": {
+      "unknownLocation": "Unknown",
+      "messages": {
+        "location": "Your proxy location is: {{location}}",
+        "failed": "Proxy check failed"
+      },
+      "failures": {
+        "auth": "Authentication failed. Open Edit Proxy and verify username/password.",
+        "network": "Network connection failed. Check host, port, and network reachability.",
+        "timeout": "Connection timed out. Retry now or use another proxy endpoint.",
+        "blocked": "Proxy endpoint seems blocked. Retry or switch to another endpoint.",
+        "invalid": "Proxy configuration appears invalid. Update the proxy fields and retry.",
+        "unknown": "Proxy validation failed. Retry first, then edit proxy settings if needed."
+      },
+      "tooltips": {
+        "checking": "Checking proxy...",
+        "retryHint": "Click check again to retry, or edit this proxy.",
+        "failedAt": "Failed {{time}}",
+        "default": "Check proxy validity"
+      },
+      "row": {
+        "needsAttention": "Needs attention"
+      },
+      "details": {
+        "location": "Location",
+        "zip": "ZIP",
+        "timezone": "Timezone",
+        "coords": "Coords",
+        "isp": "ISP",
+        "org": "Org",
+        "asn": "ASN"
+      }
+    },
+    "sync": {
+      "enabled": "Đã bật sync",
+      "disabled": "Đã tắt sync"
+    }
+  },
+  "groups": {
+    "title": "Nhóm",
+    "management": "Nhóm",
+    "add": "Thêm nhóm",
+    "edit": "Sửa nhóm",
+    "delete": "Xóa nhóm",
+    "noGroups": "Chưa tạo nhóm nào",
+    "noGroupsDescription": "Tạo nhóm để sắp xếp các profile.",
+    "form": {
+      "name": "Tên",
+      "namePlaceholder": "Nhập tên nhóm"
+    },
+    "profileCount": "{{count}} profile",
+    "profileCount_plural": "{{count}} profile",
+    "assignProfiles": "Gán profile",
+    "sync": {
+      "enabled": "Đã bật sync",
+      "disabled": "Đã tắt sync"
+    }
+  },
+  "sync": {
+    "mode": {
+      "title": "Profile Sync",
+      "description": "Quản lý chế độ sync cho \"{{name}}\"",
+      "disabled": "Tắt Sync",
+      "regular": "Sync tiêu chuẩn",
+      "encrypted": "Sync mã hóa E2E",
+      "disabledDescription": "Không đồng bộ profile này",
+      "regularDescription": "Sync nhanh, không mã hóa",
+      "encryptedDescription": "Dữ liệu được mã hóa trước khi tải lên. Server không bao giờ thấy dữ liệu gốc.",
+      "noPasswordWarning": "Chưa đặt mật khẩu E2E. Vui lòng thiết lập trong Cài đặt.",
+      "passwordRequired": "Chưa đặt mật khẩu E2E. Vui lòng thiết lập trong Cài đặt trước.",
+      "enabledToast": "Đã bật sync",
+      "disabledToast": "Đã tắt sync",
+      "syncQueued": "Đã thêm vào hàng đợi Sync",
+      "syncNow": "Sync ngay",
+      "lastSynced": "Lần sync gần nhất",
+      "notConfigured": "Chưa cấu hình dịch vụ sync.",
+      "configureService": "Cấu hình dịch vụ Sync"
+    },
+    "title": "Tài khoản",
+    "config": "Cấu hình sync",
+    "serverUrl": "Sync server URL",
+    "serverUrlPlaceholder": "https://sync.example.com",
+    "token": "Sync token",
+    "tokenPlaceholder": "Nhập token đồng bộ",
+    "status": {
+      "connected": "Đã kết nối",
+      "disconnected": "Đã ngắt kết nối",
+      "syncing": "Đang đồng bộ...",
+      "error": "Lỗi đồng bộ"
+    },
+    "description": "Kết nối tới dịch vụ sync để đồng bộ profile, proxy và nhóm giữa các thiết bị.",
+    "cloud": {
+      "tabLabel": "Cloud",
+      "selfHostedTabLabel": "Self-hosted",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "sendCode": "Gửi mã",
+      "codeSent": "Đã gửi mã. Kiểm tra email để tiếp tục.",
+      "verificationCode": "Mã xác minh",
+      "codePlaceholder": "Nhập mã gồm 6 chữ số",
+      "verifyAndLogin": "Xác minh và đăng nhập",
+      "loggingIn": "Đang đăng nhập...",
+      "connected": "Đã kết nối",
+      "plan": "Gói",
+      "profiles": "Profiles",
+      "profileUsage": "{{used}} / {{limit}}",
+      "manageAccount": "Quản lý tài khoản",
+      "logout": "Đăng xuất",
+      "logoutConfirm": "Bạn có chắc muốn đăng xuất không? Cloud Sync sẽ tạm dừng.",
+      "loginSuccess": "Đăng nhập thành công!",
+      "logoutSuccess": "Đăng xuất thành công."
+    },
+    "team": {
+      "title": "Team",
+      "name": "Tên nhóm",
+      "role": "Vai trò",
+      "roleOwner": "Owner",
+      "roleAdmin": "Admin",
+      "roleMember": "Member",
+      "manageOnWeb": "Quản lý team trên web",
+      "profileLocked": "Đang được {{email}} sử dụng",
+      "profileLockedShort": "Đang được sử dụng",
+      "cannotLaunchLocked": "Không thể mở: profile đang được {{email}} sử dụng",
+      "createdBy": "Tạo bởi {{email}}",
+      "permissionDenied": "Your team role does not allow this action."
+    }
+  },
+  "integrations": {
+    "title": "Tích hợp",
+    "api": {
+      "title": "Local API",
+      "description": "Bật Local API server cho các tích hợp bên ngoài.",
+      "enabled": "Local API đã bật",
+      "disabled": "Local API đã tắt",
+      "port": "Cổng",
+      "token": "Token API",
+      "copyToken": "Sao chép token",
+      "regenerateToken": "Tạo lại token"
+    },
+    "mcp": {
+      "title": "MCP Server",
+      "description": "Bật MCP server (Model Context Protocol) để kết nối với trợ lý AI.",
+      "enabled": "MCP Server đã bật",
+      "disabled": "MCP Server đã tắt",
+      "port": "Cổng",
+      "token": "Token MCP",
+      "config": "Cấu hình MCP",
+      "copyConfig": "Copy cấu hình"
+    }
+  },
+  "import": {
+    "title": "Nhập profile",
+    "description": "Import một profile trình duyệt có sẵn từ máy hiện tại.",
+    "selectProfile": "Chọn profile để import",
+    "noProfiles": "Không phát hiện thấy profile nào",
+    "noProfilesDescription": "Không phát hiện profile trình duyệt nào trên máy.",
+    "importing": "Đang import profile...",
+    "success": "Import profile thành công",
+    "error": "Không thể import profile"
+  },
+  "config": {
+    "camoufox": {
+      "title": "Cấu hình Camoufox",
+      "fingerprint": {
+        "title": "Fingerprint",
+        "randomize": "Random khi mở",
+        "randomizeDescription": "Tạo fingerprint mới mỗi lần trình duyệt được mở."
+      },
+      "os": {
+        "title": "Hệ điều hành",
+        "description": "Hệ điều hành dùng để mô phỏng fingerprint.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "screen": {
+        "title": "Kích thước màn hình",
+        "minWidth": "Chiều rộng tối thiểu",
+        "maxWidth": "Chiều rộng tối đa",
+        "minHeight": "Chiều cao tối thiểu",
+        "maxHeight": "Chiều cao tối đa"
+      },
+      "geoip": {
+        "title": "GeoIP",
+        "auto": "Tự động (theo proxy)",
+        "manual": "Thủ công",
+        "disabled": "Tắt"
+      },
+      "blocking": {
+        "title": "Chặn",
+        "images": "Chặn hình ảnh",
+        "webrtc": "Chặn WebRTC",
+        "webgl": "Chặn WebGL"
+      }
+    },
+    "wayfern": {
+      "title": "Cấu hình Wayfern",
+      "fingerprint": {
+        "title": "Fingerprint",
+        "randomize": "Random khi mở",
+        "randomizeDescription": "Tạo fingerprint mới mỗi lần trình duyệt được mở."
+      },
+      "os": {
+        "title": "Hệ điều hành",
+        "description": "Hệ điều hành dùng để mô phỏng fingerprint.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux",
+        "android": "Android",
+        "ios": "iOS"
+      },
+      "screen": {
+        "title": "Kích thước màn hình",
+        "minWidth": "Chiều rộng tối thiểu",
+        "maxWidth": "Chiều rộng tối đa",
+        "minHeight": "Chiều cao tối thiểu",
+        "maxHeight": "Chiều cao tối đa"
+      },
+      "blocking": {
+        "title": "Chặn",
+        "webrtc": "Chặn WebRTC",
+        "webgl": "Chặn WebGL"
+      }
+    }
+  },
+  "cookies": {
+    "management": {
+      "title": "Quản lý cookie",
+      "menuItem": "Quản lý cookie"
+    },
+    "import": {
+      "title": "Nhập cookie",
+      "description": "Import cookie từ file Netscape hoặc JSON.",
+      "selectFile": "Chọn file",
+      "preview": "Tìm thấy {{count}} cookie",
+      "success": "Import thành công {{imported}} cookie (đã ghi đè {{replaced}} cookie)",
+      "error": "Không thể nhập cookie",
+      "proFeature": "Import cookie là tính năng Pro"
+    },
+    "export": {
+      "title": "Xuất cookie",
+      "description": "Export cookie từ profile này.",
+      "formatLabel": "Định dạng",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Export cookie thành công",
+      "error": "Không thể xuất cookie"
+    }
+  },
+  "toasts": {
+    "success": {
+      "profileCreated": "Đã tạo profile thành công",
+      "profileDeleted": "Đã xóa profile thành công",
+      "profileUpdated": "Đã cập nhật profile thành công",
+      "profileLaunched": "Đã mở profile thành công",
+      "proxyCreated": "Đã tạo proxy thành công",
+      "proxyDeleted": "Đã xóa proxy thành công",
+      "proxyUpdated": "Đã cập nhật proxy thành công",
+      "groupCreated": "Đã tạo nhóm thành công",
+      "groupDeleted": "Đã xóa nhóm thành công",
+      "groupUpdated": "Đã cập nhật nhóm thành công",
+      "settingsSaved": "Đã lưu cài đặt thành công",
+      "copied": "Đã copy vào clipboard",
+      "permissionRequested": "Đã yêu cầu quyền truy cập {{permission}}",
+      "downloadComplete": "Đã tải xuống {{browser}} {{version}} thành công!",
+      "importSuccess": "Import thành công {{count}} mục",
+      "exportSuccess": "Export thành công {{count}} mục",
+      "syncSuccess": "Đã đồng bộ thành công",
+      "profileSynced": "Đã đồng bộ profile '{{name}}' thành công",
+      "cacheCleared": "Đã xóa bộ nhớ đệm thành công",
+      "vpnDeleted": "VPN deleted successfully"
+    },
+    "error": {
+      "profileCreateFailed": "Không thể tạo profile",
+      "profileDeleteFailed": "Không thể xóa profile",
+      "profileUpdateFailed": "Không thể cập nhật profile",
+      "profileLaunchFailed": "Không thể mở profile",
+      "proxyCreateFailed": "Không thể tạo proxy",
+      "proxyDeleteFailed": "Không thể xóa proxy",
+      "proxyUpdateFailed": "Không thể cập nhật proxy",
+      "groupCreateFailed": "Không thể tạo nhóm",
+      "groupDeleteFailed": "Không thể xóa nhóm",
+      "groupUpdateFailed": "Không thể cập nhật nhóm",
+      "settingsSaveFailed": "Không thể lưu cài đặt",
+      "copyFailed": "Không thể copy vào clipboard",
+      "downloadFailed": "Không thể tải xuống {{browser}}",
+      "importFailed": "Không thể import",
+      "exportFailed": "Không thể export",
+      "syncFailed": "Đồng bộ thất bại",
+      "profileSyncFailed": "Không thể đồng bộ profile '{{name}}'",
+      "cacheClearFailed": "Không thể xóa bộ nhớ đệm",
+      "unknown": "Đã xảy ra lỗi không xác định",
+      "vpnDeleteFailed": "Failed to delete VPN"
+    },
+    "loading": {
+      "downloading": "Đang tải xuống {{browser}} {{version}}",
+      "extracting": "Đang giải nén {{browser}} {{version}}",
+      "verifying": "Đang xác minh {{browser}} {{version}}",
+      "syncing": "Đang đồng bộ...",
+      "syncingProfile": "Đang đồng bộ profile '{{name}}'...",
+      "syncingProfileWithProgress": "{{count}} tệp ({{size}})",
+      "updatingVersions": "Đang cập nhật phiên bản trình duyệt..."
+    }
+  },
+  "errors": {
+    "required": "Trường này là bắt buộc",
+    "invalidUrl": "Vui lòng nhập URL hợp lệ",
+    "invalidPort": "Vui lòng nhập số cổng hợp lệ (1-65535)",
+    "invalidEmail": "Vui lòng nhập địa chỉ email hợp lệ",
+    "minLength": "Phải có ít nhất {{min}} ký tự",
+    "maxLength": "Tối đa {{max}} ký tự",
+    "networkError": "Lỗi mạng. Vui lòng kiểm tra kết nối rồi thử lại.",
+    "serverError": "Lỗi server. Vui lòng thử lại sau.",
+    "unknownError": "Đã xảy ra lỗi không xác định. Vui lòng thử lại."
+  },
+  "browser": {
+    "firefox": "Firefox",
+    "firefoxDeveloper": "Firefox Developer Edition",
+    "chromium": "Chromium",
+    "brave": "Brave",
+    "zen": "Zen Browser",
+    "camoufox": "Camoufox",
+    "wayfern": "Wayfern"
+  },
+  "fingerprint": {
+    "crossOsWarning": "Giả lập fingerprint cho hệ điều hành khác luôn kém tin cậy hơn vì không thể mô phỏng hoàn toàn tầng hệ thống. Chỉ dùng khi bạn hiểu rõ rủi ro.",
+    "crossOsLimitations": "Fingerprint cross-OS có giới hạn. Một số API cấp hệ thống vẫn có thể lộ hệ điều hành thật và vài tính năng có thể giảm hiệu năng.",
+    "osLabel": "Fingerprint hệ điều hành",
+    "selectOSPlaceholder": "Chọn hệ điều hành",
+    "generateRandomOnLaunch": "Random fingerprint khi mở",
+    "generateRandomDescription": "Khi bật, BugLogin sẽ tạo fingerprint mới mỗi lần trình duyệt được mở.",
+    "generateRandomDescriptionAuto": "Khi bật, BugLogin sẽ tạo fingerprint mới mỗi lần trình duyệt được mở. Fingerprint mới sẽ được lưu lại để tham chiếu.",
+    "autoLocationDescription": "Tự động điền thông tin vị trí dựa trên proxy, hoặc theo kết nối hiện tại nếu không dùng proxy.",
+    "editingDisabledRunning": "Không thể chỉnh Fingerprint khi profile đang chạy. Hãy dừng profile rồi thử lại.",
+    "editingDisabledRandomized": "Không thể chỉnh Fingerprint thủ công khi chế độ random đang bật. Tắt tùy chọn này để tiếp tục.",
+    "advancedWarning": "Cảnh báo: Chỉ chỉnh các tham số này khi bạn thực sự hiểu mình đang làm gì. Giá trị sai có thể làm website lỗi, tăng rủi ro bị phát hiện và gây khó debug.",
+    "basicWarning": "Cảnh báo: Chỉ chỉnh các tham số này khi bạn hiểu rõ tác động của chúng.",
+    "automatic": "Tự động",
+    "manual": "Thủ công",
+    "blockingOptions": "Tùy chọn chặn",
+    "blockImages": "Chặn hình ảnh",
+    "blockWebRTC": "Chặn WebRTC",
+    "blockWebGL": "Chặn WebGL",
+    "navigatorProperties": "Thuộc tính Navigator",
+    "userAgent": "User Agent",
+    "userAgentAndPlatform": "User Agent & Platform",
+    "platform": "Platform",
+    "platformVersion": "Phiên bản nền tảng",
+    "appVersion": "Phiên bản ứng dụng",
+    "osCpu": "OS CPU",
+    "hardwareConcurrency": "Số luồng phần cứng",
+    "maxTouchPoints": "Số điểm chạm tối đa",
+    "doNotTrack": "Do Not Track",
+    "selectDntPlaceholder": "Chọn giá trị DNT",
+    "dntAllowed": "0 (cho phép theo dõi)",
+    "dntNotAllowed": "1 (không cho phép theo dõi)",
+    "dntUnspecified": "không chỉ định",
+    "language": "Ngôn ngữ",
+    "primaryLanguage": "Ngôn ngữ chính (navigator.language)",
+    "languages": "Các ngôn ngữ (mảng JSON)",
+    "languageAndLocale": "Ngôn ngữ & Locale",
+    "screenProperties": "Thông số màn hình",
+    "screenWidth": "Chiều rộng màn hình",
+    "screenHeight": "Chiều cao màn hình",
+    "availableWidth": "Chiều rộng khả dụng",
+    "availableHeight": "Chiều cao khả dụng",
+    "colorDepth": "Độ sâu màu",
+    "pixelDepth": "Độ sâu điểm ảnh",
+    "devicePixelRatio": "Tỷ lệ điểm ảnh thiết bị",
+    "windowProperties": "Thông số cửa sổ",
+    "outerWidth": "Chiều rộng ngoài",
+    "outerHeight": "Chiều cao ngoài",
+    "innerWidth": "Chiều rộng trong",
+    "innerHeight": "Chiều cao trong",
+    "screenX": "Screen X",
+    "screenY": "Screen Y",
+    "geolocation": "Vị trí địa lý",
+    "timezoneAndGeolocation": "Múi giờ & vị trí",
+    "timezoneGeolocationDescription": "Các giá trị này sẽ ghi đè API múi giờ và geolocation của trình duyệt.",
+    "latitude": "Vĩ độ",
+    "longitude": "Kinh độ",
+    "timezone": "Múi giờ",
+    "timezoneIana": "Múi giờ (IANA)",
+    "timezoneOffset": "Độ lệch (phút so với UTC)",
+    "accuracy": "Độ chính xác (m)",
+    "locale": "Locale",
+    "region": "Khu vực",
+    "script": "Script",
+    "webglProperties": "Thông số WebGL",
+    "webglVendor": "Vendor WebGL",
+    "webglRenderer": "Renderer WebGL",
+    "webglParameters": "Tham số WebGL",
+    "webglParametersJson": "Tham số WebGL (JSON)",
+    "webgl2Parameters": "Tham số WebGL2",
+    "webglShaderPrecisionFormats": "Định dạng độ chính xác shader WebGL",
+    "webgl2ShaderPrecisionFormats": "Định dạng độ chính xác shader WebGL2",
+    "canvasFingerprint": "Fingerprint Canvas",
+    "canvasNoiseSeed": "Seed nhiễu Canvas",
+    "canvasNoiseSeedDescription": "Seed này giúp tạo fingerprint canvas nhất quán nhưng vẫn riêng biệt. Mỗi profile nên có seed khác nhau.",
+    "fonts": "Phông chữ",
+    "fontsJson": "Fonts (JSON array)",
+    "battery": "Pin",
+    "charging": "Đang sạc",
+    "chargingTime": "Thời gian sạc",
+    "dischargingTime": "Thời gian xả pin",
+    "batteryLevel": "Mức pin (0-1)",
+    "screenResolution": "Độ phân giải màn hình",
+    "maxWidth": "Chiều rộng tối đa",
+    "maxHeight": "Chiều cao tối đa",
+    "minWidth": "Chiều rộng tối thiểu",
+    "minHeight": "Chiều cao tối thiểu",
+    "hardwareProperties": "Thông số phần cứng",
+    "deviceMemory": "Bộ nhớ thiết bị (GB)",
+    "audioProperties": "Thông số audio",
+    "sampleRate": "Tần số lấy mẫu",
+    "maxChannelCount": "Số kênh tối đa",
+    "vendorInfo": "Thông tin vendor",
+    "vendor": "Nhà cung cấp",
+    "vendorSub": "Vendor Sub",
+    "productSub": "Product Sub",
+    "brand": "Thương hiệu",
+    "brandVersion": "Phiên bản brand",
+    "proFeature": "Đây là tính năng Pro",
+    "os": {
+      "windows": "Windows",
+      "macos": "macOS",
+      "linux": "Linux"
+    }
+  },
+  "warnings": {
+    "windowResizeTitle": "Thay đổi kích thước cửa sổ",
+    "windowResizeDescription": "Việc đổi kích thước cửa sổ trình duyệt có thể làm tăng rủi ro bị phát hiện fingerprint giả lập.",
+    "windowResizeCamoufoxTitle": "Viewport bị Camoufox khóa",
+    "windowResizeCamoufoxDescription": "Camoufox khóa viewport theo kích thước màn hình giả lập để giảm rủi ro fingerprint. Việc đổi kích thước cửa sổ có thể gây cắt khung nhìn hoặc xuất hiện vùng xám. Đây là hành vi bình thường.",
+    "dontShowAgain": "Không hiện lại",
+    "continue": "Tiếp tục",
+    "cancel": "Hủy"
+  },
+  "syncAll": {
+    "title": "Bật sync cho các mục hiện có",
+    "description": "Bạn có một số mục chưa được sync. Bạn có muốn bật sync cho tất cả không?",
+    "itemsList": "Các mục chưa sync: {{items}}",
+    "proxies": "{{count}} proxy",
+    "proxies_plural": "{{count}} proxy",
+    "groups": "{{count}} nhóm",
+    "groups_plural": "{{count}} nhóm",
+    "vpns": "{{count}} VPN",
+    "vpns_plural": "{{count}} VPN",
+    "enableAll": "Bật sync cho tất cả",
+    "skip": "Bỏ qua",
+    "success": "Đã bật sync cho tất cả mục"
+  },
+  "crossOs": {
+    "viewOnly": "Profile này được tạo trên {{os}} nên không được hỗ trợ trên hệ thống hiện tại",
+    "cannotLaunch": "Profile này được tạo trên {{os}} nên không được hỗ trợ trên hệ thống hiện tại",
+    "cannotModify": "Không thể đổi cài đặt sync cho profile khác hệ điều hành"
+  },
+  "profileInfo": {
+    "title": "Thông tin profile",
+    "tabs": {
+      "info": "Thông tin",
+      "settings": "Cài đặt"
+    },
+    "fields": {
+      "profileId": "Profile ID",
+      "browser": "Trình duyệt",
+      "releaseType": "Loại phát hành",
+      "proxyVpn": "Proxy / VPN",
+      "group": "Nhóm",
+      "tags": "Thẻ",
+      "note": "Ghi chú",
+      "syncStatus": "Trạng thái đồng bộ",
+      "lastLaunched": "Lần mở gần nhất",
+      "hostOs": "Hệ điều hành máy",
+      "ephemeral": "Tạm thời",
+      "extensionGroup": "Nhóm extension"
+    },
+    "values": {
+      "none": "Không có",
+      "never": "Chưa bao giờ",
+      "copied": "Đã sao chép!",
+      "yes": "Có"
+    },
+    "network": {
+      "bypassRules": "Quy tắc bypass proxy",
+      "bypassRulesTitle": "Quy tắc bypass proxy",
+      "bypassRulesDescription": "Các yêu cầu khớp với những quy tắc này sẽ kết nối trực tiếp, không đi qua proxy.",
+      "addRule": "Thêm quy tắc",
+      "rulePlaceholder": "ví dụ: example.com, 192.168.1.*, .*\\.local",
+      "noRules": "Chưa có quy tắc bypass nào được cấu hình.",
+      "ruleTypes": "Hỗ trợ hostname, địa chỉ IP và regex."
+    },
+    "actions": {
+      "manageCookies": "Quản lý cookie",
+      "assignExtensionGroup": "Gán nhóm extension"
+    },
+    "clone": {
+      "title": "Nhân bản profile",
+      "description": "Nhập tên cho profile clone",
+      "namePlaceholder": "Tên profile",
+      "button": "Clone"
+    }
+  },
+  "extensions": {
+    "title": "Extensions",
+    "description": "Quản lý extension trình duyệt và nhóm extension cho các profile.",
+    "upload": "Tải lên",
+    "delete": "Xóa",
+    "extensionsTab": "Extensions",
+    "groupsTab": "Nhóm",
+    "managedNotice": "Các extension được quản lý ở đây sẽ ghi đè extension cài thủ công trong profile mỗi khi mở.",
+    "proRequired": "Quản lý extension là tính năng Pro",
+    "empty": "Chưa có extension nào được tải lên.",
+    "noGroups": "Chưa có nhóm extension nào.",
+    "createGroup": "Tạo nhóm",
+    "addToGroup": "Thêm extension...",
+    "removeFromGroup": "Gỡ khỏi nhóm",
+    "deleteGroup": "Xóa nhóm",
+    "extensionGroup": "Nhóm extension",
+    "compatibility": {
+      "label": "Tương thích",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium & Firefox"
+    },
+    "selectedFile": "File đã chọn",
+    "namePlaceholder": "Tên extension",
+    "groupNamePlaceholder": "Tên nhóm extension",
+    "uploadSuccess": "Tải lên extension thành công",
+    "deleteSuccess": "Đã xóa extension thành công",
+    "groupCreateSuccess": "Đã tạo nhóm extension thành công",
+    "groupUpdateSuccess": "Đã cập nhật nhóm extension thành công",
+    "groupDeleteSuccess": "Đã xóa nhóm extension thành công",
+    "deleteConfirmTitle": "Xóa extension",
+    "deleteConfirmDescription": "Bạn có chắc muốn xóa \"{{name}}\" không? Thao tác này không thể hoàn tác.",
+    "deleteGroupConfirmTitle": "Xóa nhóm extension",
+    "deleteGroupConfirmDescription": "Bạn có chắc muốn xóa nhóm \"{{name}}\" không? Thao tác này không thể hoàn tác.",
+    "invalidFileType": "File không hợp lệ. Vui lòng tải lên file .crx, .xpi hoặc .zip.",
+    "readError": "Không thể đọc file extension.",
+    "assignTitle": "Gán nhóm extension",
+    "assignDescription": "Gán {{count}} profile đã chọn vào một nhóm extension.",
+    "noGroup": "Không có (không dùng nhóm extension)",
+    "assignSuccess": "Gán nhóm extension thành công"
+  },
+  "pro": {
+    "badge": "PRO",
+    "fingerprintLocked": "Chỉnh Fingerprint là tính năng Pro",
+    "cookieCopyLocked": "Copy cookie là tính năng Pro",
+    "cookieImportLocked": "Import cookie là tính năng Pro",
+    "cookieExportLocked": "Export cookie là tính năng Pro",
+    "cookieManagementLocked": "Quản lý cookie là tính năng Pro"
+  },
+  "automation": {
+    "title": "Automation Workspace",
+    "description": "Thiết kế workflow trình duyệt trên canvas kéo thả, kiểm tra từng bước và chuẩn bị sẵn để bàn giao cho vận hành.",
+    "categories": {
+      "trigger": "Trigger",
+      "session": "Session",
+      "navigation": "Navigation",
+      "interaction": "Interaction",
+      "data": "Data",
+      "logic": "Logic",
+      "delivery": "Delivery"
+    },
+    "defaults": {
+      "workspaceName": "Revenue Flow",
+      "workspaceDescription": "Mở profile, vào trang đích và chuẩn bị chuỗi thao tác sẵn sàng bàn giao cho đội vận hành."
+    },
+    "workspace": {
+      "title": "Workspaces",
+      "select": "Chọn workspace",
+      "empty": "Chưa chọn workspace nào",
+      "nodes": "nodes"
+    },
+    "library": {
+      "title": "Automation Library",
+      "description": "Kéo block vào canvas hoặc bấm để thêm nhanh vào workflow hiện tại.",
+      "searchPlaceholder": "Tìm block...",
+      "palette": "Node Palette"
+    },
+    "canvas": {
+      "searchPlaceholder": "Tìm node...",
+      "connect": "Nối node",
+      "validate": "Kiểm tra",
+      "zoomIn": "Phóng to",
+      "zoomOut": "Thu nhỏ",
+      "fitCanvas": "Fit canvas",
+      "ariaLabel": "Canvas kéo thả cho automation",
+      "connectionsTitle": "Kết nối giữa các node"
+    },
+    "layout": {
+      "showLibrary": "Mở thư viện",
+      "hideLibrary": "Ẩn thư viện",
+      "showInspector": "Mở Inspector",
+      "hideInspector": "Ẩn Inspector"
+    },
+    "inspector": {
+      "workflow": "Cài đặt workflow",
+      "workflowDescription": "Đặt tên workspace, trạng thái sẵn sàng và ngữ cảnh triển khai.",
+      "node": "Node Inspector",
+      "nodeDescription": "Chỉnh node đang chọn trực tiếp trên canvas.",
+      "connections": "Kết nối đầu ra",
+      "noConnections": "Node này chưa nối tới bước tiếp theo.",
+      "selectNode": "Chọn một node trên canvas để chỉnh nhãn, cấu hình và hướng đi."
+    },
+    "fields": {
+      "workspaceName": "Tên workspace",
+      "workspaceDescription": "Mô tả workspace",
+      "tags": "Tag",
+      "status": "Trạng thái",
+      "nodeLabel": "Tên node",
+      "nodeDescription": "Mô tả node",
+      "triggerMode": "Cách trigger",
+      "audience": "Phạm vi chạy",
+      "profile": "Profile",
+      "launchMode": "Chế độ mở",
+      "url": "URL",
+      "waitUntil": "Điểm chờ",
+      "durationMs": "Độ trễ cơ bản (ms)",
+      "jitterMs": "Độ lệch ngẫu nhiên (ms)",
+      "selector": "Selector",
+      "retryCount": "Số lần retry",
+      "text": "Nội dung nhập",
+      "clearBeforeTyping": "Xóa ô nhập trước khi gõ",
+      "outputKey": "Output key",
+      "leftValue": "Giá trị bên trái",
+      "operator": "Toán tử",
+      "rightValue": "Giá trị bên phải",
+      "sourceKey": "Source key",
+      "maxIterations": "Số vòng lặp tối đa",
+      "delayMs": "Độ trễ giữa các vòng (ms)",
+      "outputPath": "Đường dẫn lưu",
+      "fullPage": "Chụp toàn trang",
+      "method": "HTTP method",
+      "payload": "Payload"
+    },
+    "placeholders": {
+      "url": "https://target.example.com",
+      "selector": "#submit-button",
+      "text": "Nhập nội dung cần gõ hoặc dùng biến như {{email}}",
+      "outputKey": "lead_title",
+      "dynamicValue": "{{last_response.status}}",
+      "sourceKey": "rows",
+      "outputPath": "captures/session.png",
+      "payload": "{\n  \"status\": \"ok\"\n}",
+      "tags": "growth, launch, qa",
+      "selectOption": "Chọn một giá trị",
+      "selectProfile": "Chọn profile"
+    },
+    "options": {
+      "manual": "Thủ công",
+      "scheduled": "Lên lịch",
+      "webhook": "Webhook",
+      "singleProfile": "Một profile",
+      "profileBatch": "Nhiều profile",
+      "isolated": "Phiên tách biệt",
+      "reuse": "Dùng lại phiên đang chạy",
+      "domReady": "DOM sẵn sàng",
+      "networkIdle": "Mạng ổn định",
+      "equals": "Bằng",
+      "contains": "Chứa",
+      "exists": "Tồn tại",
+      "post": "POST",
+      "put": "PUT",
+      "patch": "PATCH",
+      "enabled": "Bật",
+      "disabled": "Tắt",
+      "draft": "Nháp",
+      "ready": "Sẵn sàng",
+      "live": "Đang chạy"
+    },
+    "status": {
+      "saving": "Đang lưu",
+      "unsaved": "Có thay đổi chưa lưu",
+      "saved": "Đã lưu",
+      "lastSaved": "Lần lưu gần nhất"
+    },
+    "summary": {
+      "noProfile": "Chưa chọn profile",
+      "noUrl": "Chưa có URL",
+      "noSelector": "Chưa có selector",
+      "noText": "Chưa có nội dung nhập",
+      "loop": "Loop theo",
+      "noOutput": "Chưa có đường dẫn lưu",
+      "noWebhook": "Chưa có webhook URL",
+      "unknownNode": "Node không xác định",
+      "neverSaved": "Chưa từng lưu"
+    },
+    "validation": {
+      "title": "Kiểm tra workflow",
+      "ready": "Sẵn sàng",
+      "readyDescription": "Cấu trúc workflow hiện đã ổn. Bạn có thể tiếp tục tinh chỉnh selector và payload.",
+      "issueCount": "{{count}} vấn đề",
+      "startNode": "Workflow cần đúng một block Start.",
+      "disconnected": "Có {{count}} node đang tách khỏi luồng chính.",
+      "profileRequired": "Block Open Profile phải được gán profile trước khi bàn giao.",
+      "urlRequired": "Block Open URL phải có URL.",
+      "complexity": "Workflow này đã khá lớn. Nên tách nhỏ thành nhiều workspace để dễ bảo trì hơn.",
+      "error": "Lỗi nghiêm trọng",
+      "warning": "Cần lưu ý"
+    },
+    "empty": {
+      "title": "Automation Workspace đang trống",
+      "description": "Tạo workspace mới hoặc kéo node từ thư viện vào canvas để bắt đầu."
+    },
+    "toasts": {
+      "duplicated": "Đã nhân bản automation workspace.",
+      "deleted": "Đã xóa automation workspace."
+    },
+    "templates": {
+      "start": {
+        "label": "Start",
+        "summary": "Xác định workflow được trigger như thế nào."
+      },
+      "openProfile": {
+        "label": "Mở profile",
+        "summary": "Khởi chạy profile trình duyệt cho lần chạy này."
+      },
+      "openUrl": {
+        "label": "Mở URL",
+        "summary": "Đi tới URL đích và chờ trang ổn định."
+      },
+      "wait": {
+        "label": "Chờ",
+        "summary": "Thêm khoảng nghỉ, có thể kèm jitter để hành vi tự nhiên hơn."
+      },
+      "click": {
+        "label": "Click phần tử",
+        "summary": "Thực hiện thao tác click theo selector và có retry khi cần."
+      },
+      "typeText": {
+        "label": "Nhập văn bản",
+        "summary": "Nhập nội dung vào ô và có thể xóa giá trị cũ trước."
+      },
+      "extractText": {
+        "label": "Trích xuất văn bản",
+        "summary": "Đọc dữ liệu từ trang và lưu vào output."
+      },
+      "condition": {
+        "label": "Điều kiện",
+        "summary": "Rẽ nhánh workflow dựa trên dữ liệu thực tế khi chạy."
+      },
+      "loop": {
+        "label": "Vòng lặp",
+        "summary": "Lặp chuỗi hành động trên nhiều phần tử hoặc bản ghi."
+      },
+      "screenshot": {
+        "label": "Chụp ảnh màn hình",
+        "summary": "Lưu ảnh bằng chứng thao tác, dữ liệu QA hoặc ảnh đầu ra."
+      },
+      "webhook": {
+        "label": "Webhook",
+        "summary": "Đẩy kết quả sang hệ thống khác khi workflow hoàn tất."
+      }
+    }
+  },
+  "shell": {
+    "subtitle": "Làm việc theo workspace",
+    "workspaceMode": "Chế độ workspace",
+    "workspaceHint": "Sidebar ưu tiên các luồng chính",
+    "collapseSidebar": "Thu gọn sidebar",
+    "expandSidebar": "Mở rộng sidebar",
+    "sections": {
+      "profiles": "Profiles",
+      "automation": "Automation",
+      "proxies": "Proxy & VPN",
+      "settings": "Cài đặt",
+      "integrations": "Tích hợp"
+    },
+    "shared": {
+      "enabled": "Bật",
+      "disabled": "Tắt",
+      "sync": "Đồng bộ",
+      "local": "Cục bộ",
+      "system": "Hệ thống"
+    },
+    "proxyPage": {
+      "title": "Proxy & VPN",
+      "description": "Quản lý proxy, VPN và các thao tác mạng nhanh trong một workspace rộng, thay vì bị bó hẹp trong modal nhỏ.",
+      "manage": "Mở trình quản lý đầy đủ",
+      "proxyCount": "Số proxy đã lưu",
+      "vpnCount": "Số cấu hình VPN",
+      "syncReady": "Tài nguyên sẵn sàng để sync",
+      "empty": "Chưa có proxy nào. Mở trình quản lý để import hoặc thêm nhanh danh sách proxy.",
+      "quickActions": "Thao tác nhanh",
+      "quickActionsDescription": "Khi cần import hàng loạt, kiểm tra proxy hoặc chỉnh VPN, hãy mở trình quản lý đầy đủ.",
+      "createProfile": "Tạo profile với preset mạng",
+      "syncService": "Mở dịch vụ sync",
+      "openWorkspace": "Quản lý Proxy & VPN"
+    },
+    "settingsPage": {
+      "title": "Cài đặt",
+      "description": "Đưa các thiết lập quan trọng ra màn hình riêng; phần chỉnh sâu chỉ mở khi thực sự cần.",
+      "openAdvanced": "Mở cài đặt nâng cao",
+      "theme": "Chế độ giao diện",
+      "defaultBrowser": "Trình duyệt mặc định",
+      "layoutNote": "Định hướng bố cục",
+      "layoutNoteDescription": "Shell này được thiết kế để chuyển các luồng nặng khỏi chuỗi modal chồng lớp sang workspace riêng.",
+      "shortcuts": "Lối tắt",
+      "manageIntegrations": "Quản lý tích hợp",
+      "syncService": "Mở dịch vụ sync",
+      "permissions": "Quyền truy cập & giao diện"
+    },
+    "integrationsPage": {
+      "title": "Tích hợp",
+      "description": "Theo dõi Local API và MCP ở giao diện đầy đủ; chỉ mở Control Center khi cần chỉnh chi tiết.",
+      "configure": "Mở Control Center",
+      "localApi": "Local API",
+      "mcp": "MCP Server",
+      "nextStep": "Bước tiếp theo",
+      "nextStepDescription": "Khu vực này là điểm kết nối cho công cụ bên ngoài và trợ lý AI làm việc với BugLogin.",
+      "openControlCenter": "Cấu hình API & MCP",
+      "openAutomation": "Mở Automation Workspace"
+    }
+  }
+}

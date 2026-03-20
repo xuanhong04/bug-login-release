@@ -118,7 +118,7 @@ export function SharedCamoufoxConfigForm({
   config,
   onConfigChange,
   className = "",
-  isCreating = false,
+  isCreating: _isCreating = false,
   forceAdvanced = false,
   readOnly = false,
   browserType = "camoufox",
@@ -135,27 +135,6 @@ export function SharedCamoufoxConfigForm({
 
   // Get selected OS (defaults to current OS)
   const selectedOS = config.os || currentOS;
-
-  // Set screen resolution to user's screen size when creating a new profile
-  useEffect(() => {
-    if (isCreating && typeof window !== "undefined") {
-      const screenWidth = window.screen.width;
-      const screenHeight = window.screen.height;
-
-      // Only set if not already configured
-      if (!config.screen_max_width) {
-        onConfigChange("screen_max_width", screenWidth);
-      }
-      if (!config.screen_max_height) {
-        onConfigChange("screen_max_height", screenHeight);
-      }
-    }
-  }, [
-    isCreating,
-    config.screen_max_width,
-    config.screen_max_height,
-    onConfigChange,
-  ]);
 
   // Parse fingerprint config when component mounts or config changes
   useEffect(() => {

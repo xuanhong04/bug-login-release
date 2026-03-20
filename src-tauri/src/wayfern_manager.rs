@@ -430,6 +430,7 @@ impl WayfernManager {
       "--disable-updater".to_string(),
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
+      "--restore-last-session".to_string(),
       "--disable-infobars".to_string(),
       "--disable-quic".to_string(),
       "--disable-features=DialMediaRouteProvider".to_string(),
@@ -607,10 +608,28 @@ impl WayfernManager {
         {
           use std::os::windows::process::CommandExt;
           const CREATE_NO_WINDOW: u32 = 0x08000000;
-          let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F"])
+          let graceful = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T"])
             .creation_flags(CREATE_NO_WINDOW)
             .output();
+
+          let mut still_running = false;
+          if graceful.as_ref().is_ok() {
+            use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            let system = System::new_with_specifics(
+              RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+            );
+            still_running = system.process(Pid::from_u32(pid)).is_some();
+          }
+
+          // Fallback force kill only if graceful termination did not finish.
+          if still_running {
+            let _ = std::process::Command::new("taskkill")
+              .args(["/PID", &pid.to_string(), "/T", "/F"])
+              .creation_flags(CREATE_NO_WINDOW)
+              .output();
+          }
         }
         log::info!("Stopped Wayfern instance {id} (PID: {pid})");
       }
@@ -826,6 +845,15 @@ impl WayfernManager {
     std::fs::create_dir_all(&profile_path)?;
 
     if let Some(existing) = self.find_wayfern_by_profile(&profile_path_str).await {
+      if url.is_none() {
+        log::info!(
+          "Reusing existing Wayfern instance for profile '{}' (ID: {})",
+          profile.name,
+          profile.id
+        );
+        return Ok(existing);
+      }
+
       log::info!("Stopping existing Wayfern instance for profile");
       self.stop_wayfern(&existing.id).await?;
     }

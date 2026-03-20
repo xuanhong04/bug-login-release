@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { extractRootError } from "@/lib/error-utils";
 import type { GroupWithCount } from "@/types";
 
 /**
@@ -23,7 +24,7 @@ export function useGroupEvents() {
       setError(null);
     } catch (err: unknown) {
       console.error("Failed to load groups:", err);
-      setError(`Failed to load groups: ${JSON.stringify(err)}`);
+      setError(`Failed to load groups: ${extractRootError(err)}`);
     }
   }, []);
 
@@ -35,6 +36,7 @@ export function useGroupEvents() {
   // Initial load and event listeners setup
   useEffect(() => {
     let groupsUnlisten: (() => void) | undefined;
+    let profilesUnlisten: (() => void) | undefined;
 
     const setupListeners = async () => {
       try {
@@ -48,24 +50,18 @@ export function useGroupEvents() {
         });
 
         // Also listen for profile changes since groups show profile counts
-        const profilesUnlisten = await listen("profiles-changed", () => {
+        profilesUnlisten = await listen("profiles-changed", () => {
           console.log(
             "Received profiles-changed event, reloading groups for updated counts",
           );
           void loadGroups();
         });
 
-        // Store both listeners for cleanup
-        groupsUnlisten = () => {
-          groupsUnlisten?.();
-          profilesUnlisten();
-        };
-
         console.log("Group event listeners set up successfully");
       } catch (err) {
         console.error("Failed to setup group event listeners:", err);
         setError(
-          `Failed to setup group event listeners: ${JSON.stringify(err)}`,
+          `Failed to setup group event listeners: ${extractRootError(err)}`,
         );
       } finally {
         setIsLoading(false);
@@ -77,6 +73,7 @@ export function useGroupEvents() {
     // Cleanup listeners on unmount
     return () => {
       if (groupsUnlisten) groupsUnlisten();
+      if (profilesUnlisten) profilesUnlisten();
     };
   }, [loadGroups]);
 

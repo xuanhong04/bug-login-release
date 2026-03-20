@@ -891,6 +891,8 @@ impl Browser for ChromiumBrowser {
       // Disable quit confirmation and session restore prompts
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
+      // Keep last-session continuity on full browser restart.
+      "--restore-last-session".to_string(),
       "--disable-infobars".to_string(),
       // Disable QUIC/HTTP3 to ensure traffic goes through HTTP proxy
       "--disable-quic".to_string(),
@@ -1097,6 +1099,7 @@ impl Browser for WayfernBrowser {
       "--disable-updater".to_string(),
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
+      "--restore-last-session".to_string(),
       "--disable-infobars".to_string(),
       "--disable-quic".to_string(),
       // Wayfern-specific args for automation

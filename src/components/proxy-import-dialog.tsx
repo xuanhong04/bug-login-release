@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getCurrentOS } from "@/lib/browser-utils";
+import { optimizeParsedProxies } from "@/lib/proxy-benchmark";
 import type {
   ParsedProxyLine,
   ProxyImportResult,
@@ -52,6 +54,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     null,
   );
   const [isImporting, setIsImporting] = useState(false);
+  const [benchmarkProgress, setBenchmarkProgress] = useState(0);
   const [namePrefix, setNamePrefix] = useState("Imported");
 
   const os = getCurrentOS();
@@ -65,6 +68,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     setInvalidProxies([]);
     setImportResult(null);
     setIsImporting(false);
+    setBenchmarkProgress(0);
     setNamePrefix("Imported");
   }, []);
 
@@ -202,10 +206,17 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   const handleImport = useCallback(async () => {
     setIsImporting(true);
     try {
+      setBenchmarkProgress(0);
+      const optimizedParsed = await optimizeParsedProxies(parsedProxies, {
+        onProgress: (completed, total) => {
+          if (total <= 0) return;
+          setBenchmarkProgress(Math.round((completed / total) * 100));
+        },
+      });
       const result = await invoke<ProxyImportResult>(
         "import_proxies_from_parsed",
         {
-          parsedProxies,
+          parsedProxies: optimizedParsed,
           namePrefix: namePrefix.trim() || "Imported",
         },
       );
@@ -219,6 +230,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
       );
     } finally {
       setIsImporting(false);
+      setBenchmarkProgress(0);
     }
   }, [parsedProxies, namePrefix]);
 
@@ -336,6 +348,9 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
 
         {step === "preview" && (
           <div className="space-y-4">
+            {isImporting && (
+              <Progress value={benchmarkProgress} className="h-1.5" />
+            )}
             <div className="space-y-2">
               <Label htmlFor="name-prefix">Name Prefix</Label>
               <Input

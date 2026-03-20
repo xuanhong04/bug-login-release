@@ -2,7 +2,7 @@
 
 import { ThemeProvider } from "next-themes";
 import { useEffect, useState } from "react";
-import { applyThemeColors, clearThemeColors } from "@/lib/themes";
+import { applyThemeColors, getThemeAppearance } from "@/lib/themes";
 
 interface AppSettings {
   set_as_default_browser: boolean;
@@ -17,11 +17,6 @@ interface CustomThemeProviderProps {
 export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [defaultTheme, setDefaultTheme] = useState<string>("system");
-  const [_mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -46,16 +41,18 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         ) {
           setDefaultTheme(themeValue);
         } else if (themeValue === "custom") {
-          setDefaultTheme("dark");
           if (
             settings.custom_theme &&
             Object.keys(settings.custom_theme).length > 0
           ) {
+            setDefaultTheme(getThemeAppearance(settings.custom_theme));
             try {
               applyThemeColors(settings.custom_theme);
             } catch (error) {
               console.warn("Failed to apply custom theme variables:", error);
             }
+          } else {
+            setDefaultTheme("dark");
           }
         } else {
           setDefaultTheme("system");
@@ -74,29 +71,6 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
 
     void loadTheme();
   }, []);
-
-  // Additional effect to ensure custom theme is applied after mount
-  useEffect(() => {
-    if (!isLoading && _mounted) {
-      const reapplyCustomTheme = async () => {
-        try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          const settings = await invoke<AppSettings>("get_app_settings");
-
-          if (settings?.theme === "custom" && settings.custom_theme) {
-            applyThemeColors(settings.custom_theme);
-          } else {
-            clearThemeColors();
-          }
-        } catch (error) {
-          console.warn("Failed to reapply custom theme:", error);
-        }
-      };
-
-      // Apply after a short delay to ensure CSS has loaded
-      setTimeout(reapplyCustomTheme, 100);
-    }
-  }, [isLoading, _mounted]);
 
   if (isLoading) {
     // Keep UI simple during initial settings load to avoid flicker

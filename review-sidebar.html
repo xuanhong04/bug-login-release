@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BugLogin Sidebar Review</title>
+  <style>
+    :root {
+      --bg: oklch(0.98 0.004 260);
+      --card: oklch(1 0 0);
+      --line: oklch(0.9 0.01 260);
+      --text: oklch(0.27 0.02 260);
+      --muted: oklch(0.53 0.02 260);
+      --accent: oklch(0.58 0.16 250);
+      --accent-soft: oklch(0.95 0.03 250);
+      --success: oklch(0.63 0.15 150);
+      --warning: oklch(0.74 0.15 85);
+      --danger: oklch(0.62 0.2 25);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 18% 10%, oklch(0.96 0.03 245), transparent 40%),
+        radial-gradient(circle at 85% 100%, oklch(0.96 0.02 180), transparent 42%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: color-mix(in oklch, var(--card) 84%, var(--bg));
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+    }
+
+    .brand-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(140deg, oklch(0.58 0.15 250), oklch(0.62 0.13 190));
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .brand strong { font-size: 14px; line-height: 1; display: block; }
+    .brand span { font-size: 12px; color: var(--muted); }
+
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .section-title {
+      margin: 10px 10px 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--text);
+      border: 1px solid transparent;
+      cursor: default;
+    }
+
+    .item .left { display: flex; align-items: center; gap: 8px; }
+
+    .item.active {
+      background: var(--accent-soft);
+      border-color: color-mix(in oklch, var(--accent) 35%, white);
+      color: oklch(0.35 0.08 250);
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: oklch(0.78 0.02 260);
+    }
+
+    .dot.success { background: var(--success); }
+    .dot.warning { background: var(--warning); }
+
+    .pill {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: white;
+    }
+
+    .footer {
+      margin-top: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: var(--card);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .main {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .head h1 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .kpi {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .value.success { color: var(--success); }
+    .value.danger { color: var(--danger); }
+
+    @media (max-width: 960px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">BL</div>
+        <div>
+          <strong>BugLogin</strong>
+          <span>Profiles Workspace</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <div class="section-title">Tổng quan</div>
+        <div class="item active">
+          <div class="left"><span class="dot success"></span><span>Profiles</span></div>
+          <span class="pill">124</span>
+        </div>
+        <div class="item">
+          <div class="left"><span class="dot"></span><span>Proxy Pools</span></div>
+          <span class="pill">18</span>
+        </div>
+        <div class="item">
+          <div class="left"><span class="dot warning"></span><span>Running Sessions</span></div>
+          <span class="pill">9</span>
+        </div>
+
+        <div class="section-title">Quản trị</div>
+        <div class="item"><div class="left"><span class="dot"></span><span>Team</span></div></div>
+        <div class="item"><div class="left"><span class="dot"></span><span>Logs</span></div></div>
+        <div class="item"><div class="left"><span class="dot"></span><span>Settings</span></div></div>
+      </nav>
+
+      <div class="footer">
+        Trạng thái hệ thống: Ổn định<br />
+        Last sync: 2 phút trước
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="head">
+        <h1>Sidebar Review Mockup</h1>
+        <div>
+          <button class="btn">Import</button>
+          <button class="btn primary">Create Profile</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="kpi">Total Profiles</div>
+          <div class="value">124</div>
+        </div>
+        <div class="card">
+          <div class="kpi">Proxy Healthy</div>
+          <div class="value success">96%</div>
+        </div>
+        <div class="card">
+          <div class="kpi">Detection Risk</div>
+          <div class="value danger">Low</div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

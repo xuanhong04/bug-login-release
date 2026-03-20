@@ -17,13 +17,22 @@ import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import {
+  LuArchive,
   LuCheck,
   LuChevronDown,
   LuChevronUp,
+  LuClock3,
   LuCookie,
   LuInfo,
+  LuLoaderCircle,
   LuLock,
+  LuPause,
+  LuPin,
+  LuPlay,
   LuPuzzle,
+  LuShieldAlert,
+  LuShieldCheck,
+  LuSquare,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
@@ -75,8 +84,14 @@ import {
   getProfileIcon,
   isCrossOsProfile,
 } from "@/lib/browser-utils";
+import { extractRootError } from "@/lib/error-utils";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import { trimName } from "@/lib/name-utils";
+import {
+  canPerformTeamAction,
+  normalizeTeamRole,
+} from "@/lib/team-permissions";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
   BrowserProfile,
@@ -109,6 +124,7 @@ type TableMeta = {
   runningProfiles: Set<string>;
   launchingProfiles: Set<string>;
   stoppingProfiles: Set<string>;
+  checkingProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
   browserState: ReturnType<typeof useBrowserState>;
 
@@ -171,6 +187,7 @@ type TableMeta = {
   // Launch/stop helpers
   setLaunchingProfiles: React.Dispatch<React.SetStateAction<Set<string>>>;
   setStoppingProfiles: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setCheckingProfiles: React.Dispatch<React.SetStateAction<Set<string>>>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
 
@@ -180,6 +197,9 @@ type TableMeta = {
   onCloneProfile?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onOpenCookieManagement?: (profile: BrowserProfile) => void;
+  onPinProfile?: (profile: BrowserProfile) => void;
+  onUnpinProfile?: (profile: BrowserProfile) => void;
+  isProfilePinned: (profileId: string) => boolean;
 
   // Traffic snapshots (lightweight real-time data)
   trafficSnapshots: Record<string, TrafficSnapshot>;
@@ -204,6 +224,7 @@ type TableMeta = {
   // Team locks
   isProfileLockedByAnother: (profileId: string) => boolean;
   getProfileLockEmail: (profileId: string) => string | undefined;
+  isReadOnlyRole: boolean;
 };
 
 type SyncStatusDot = {
@@ -214,6 +235,7 @@ type SyncStatusDot = {
 };
 
 function getProfileSyncStatusDot(
+  t: (key: string, options?: Record<string, unknown>) => string,
   profile: BrowserProfile,
   liveStatus:
     | "syncing"
@@ -235,14 +257,14 @@ function getProfileSyncStatusDot(
     case "syncing":
       return {
         color: "bg-yellow-500",
-        tooltip: "Syncing...",
+        tooltip: t("profiles.table.syncing"),
         animate: true,
         encrypted,
       };
     case "waiting":
       return {
         color: "bg-yellow-500",
-        tooltip: "Waiting to sync",
+        tooltip: t("profiles.table.waitingToSync"),
         animate: false,
         encrypted,
       };
@@ -250,15 +272,19 @@ function getProfileSyncStatusDot(
       return {
         color: "bg-green-500",
         tooltip: profile.last_sync
-          ? `Synced ${new Date(profile.last_sync * 1000).toLocaleString()}`
-          : "Synced",
+          ? t("profiles.table.syncedAt", {
+              time: new Date(profile.last_sync * 1000).toLocaleString(),
+            })
+          : t("common.status.synced"),
         animate: false,
         encrypted,
       };
     case "error":
       return {
         color: "bg-red-500",
-        tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
+        tooltip: errorMessage
+          ? t("profiles.table.syncErrorWithMessage", { message: errorMessage })
+          : t("profiles.table.syncError"),
         animate: false,
         encrypted,
       };
@@ -266,7 +292,9 @@ function getProfileSyncStatusDot(
       if (profile.last_sync) {
         return {
           color: "bg-gray-400",
-          tooltip: `Sync disabled, last sync ${formatRelativeTime(profile.last_sync)}`,
+          tooltip: t("profiles.table.syncDisabledLastSync", {
+            time: formatRelativeTime(profile.last_sync),
+          }),
           animate: false,
           encrypted: false,
         };
@@ -279,6 +307,7 @@ function getProfileSyncStatusDot(
 
 const TagsCell = React.memo<{
   profile: BrowserProfile;
+  t: (key: string, options?: Record<string, unknown>) => string;
   isDisabled: boolean;
   tagsOverrides: Record<string, string[]>;
   allTags: string[];
@@ -291,6 +320,7 @@ const TagsCell = React.memo<{
 }>(
   ({
     profile,
+    t,
     isDisabled,
     tagsOverrides,
     allTags,
@@ -459,7 +489,9 @@ const TagsCell = React.memo<{
             </Badge>
           ))}
           {effectiveTags.length === 0 && (
-            <span className="text-muted-foreground">No tags</span>
+            <span className="text-muted-foreground">
+              {t("profiles.table.noTags")}
+            </span>
           )}
           {hiddenCount > 0 && (
             <Badge variant="outline" className="px-2 py-0 text-xs">
@@ -510,7 +542,9 @@ const TagsCell = React.memo<{
             onChange={(opts) => void handleChange(opts)}
             creatable
             selectFirstItem={false}
-            placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
+            placeholder={
+              effectiveTags.length === 0 ? t("profiles.table.addTags") : ""
+            }
             className={cn(
               "bg-transparent border-0! focus-within:ring-0!",
               "[&_div:first-child]:border-0! [&_div:first-child]:ring-0! [&_div:first-child]:focus-within:ring-0!",
@@ -586,6 +620,7 @@ NonHoverableTooltip.displayName = "NonHoverableTooltip";
 
 const NoteCell = React.memo<{
   profile: BrowserProfile;
+  t: (key: string, options?: Record<string, unknown>) => string;
   isDisabled: boolean;
   noteOverrides: Record<string, string | null>;
   openNoteEditorFor: string | null;
@@ -596,6 +631,7 @@ const NoteCell = React.memo<{
 }>(
   ({
     profile,
+    t,
     isDisabled,
     noteOverrides,
     openNoteEditorFor,
@@ -715,14 +751,14 @@ const NoteCell = React.memo<{
                     !effectiveNote && "text-muted-foreground",
                   )}
                 >
-                  {effectiveNote ? trimmedNote : "No Note"}
+                  {effectiveNote ? trimmedNote : t("profiles.table.noNote")}
                 </span>
               </button>
             </TooltipTrigger>
             {showTooltip && (
               <TooltipContent className="max-w-[320px]">
                 <p className="whitespace-pre-wrap wrap-break-word">
-                  {effectiveNote || "No Note"}
+                  {effectiveNote || t("profiles.table.noNote")}
                 </p>
               </TooltipContent>
             )}
@@ -759,7 +795,7 @@ const NoteCell = React.memo<{
               void onNoteChange(noteValue);
               setOpenNoteEditorFor(null);
             }}
-            placeholder="Add a note..."
+            placeholder={t("profiles.table.notePlaceholder")}
             className="w-full min-h-6 max-h-[200px] px-2 py-1 text-sm bg-transparent border-0 resize-none focus:outline-none focus:ring-0"
             style={{
               overflow: "auto",
@@ -795,10 +831,17 @@ interface ProfilesDataTableProps {
   onBulkGroupAssignment?: () => void;
   onBulkProxyAssignment?: () => void;
   onBulkCopyCookies?: () => void;
+  onBulkArchive?: () => void;
   onBulkExtensionGroupAssignment?: () => void;
   onAssignExtensionGroup?: (profileIds: string[]) => void;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
+  onArchiveProfile?: (profile: BrowserProfile) => void;
+  onRestoreProfile?: (profile: BrowserProfile) => void;
+  isProfileArchived?: (profileId: string) => boolean;
+  onPinProfile?: (profile: BrowserProfile) => void;
+  onUnpinProfile?: (profile: BrowserProfile) => void;
+  isProfilePinned?: (profileId: string) => boolean;
   crossOsUnlocked?: boolean;
   syncUnlocked?: boolean;
 }
@@ -822,10 +865,17 @@ export function ProfilesDataTable({
   onBulkGroupAssignment,
   onBulkProxyAssignment,
   onBulkCopyCookies,
+  onBulkArchive,
   onBulkExtensionGroupAssignment,
   onAssignExtensionGroup,
   onOpenProfileSyncDialog,
   onToggleProfileSync,
+  onArchiveProfile,
+  onRestoreProfile,
+  isProfileArchived,
+  onPinProfile,
+  onUnpinProfile,
+  isProfilePinned,
   crossOsUnlocked = false,
   syncUnlocked = false,
 }: ProfilesDataTableProps) {
@@ -902,10 +952,15 @@ export function ProfilesDataTable({
   const [stoppingProfiles, setStoppingProfiles] = React.useState<Set<string>>(
     new Set(),
   );
+  const [checkingProfiles, setCheckingProfiles] = React.useState<Set<string>>(
+    new Set(),
+  );
 
   const { storedProxies } = useProxyEvents();
   const { vpnConfigs } = useVpnEvents();
   const { user } = useCloudAuth();
+  const teamRole = normalizeTeamRole(user?.teamRole);
+  const isReadOnlyRole = !canPerformTeamAction(teamRole, "update_profile_note");
   const { isProfileLocked, getLockInfo } = useTeamLocks(user?.id);
 
   const [proxyOverrides, setProxyOverrides] = React.useState<
@@ -955,15 +1010,15 @@ export function ProfilesDataTable({
   const canCreateLocationProxy = hasCloudProxy || crossOsUnlocked;
 
   const loadCountries = React.useCallback(async () => {
-    if (countriesLoaded || !canCreateLocationProxy) return;
+    if (countriesLoaded || !canCreateLocationProxy || !user) return;
     try {
       const data = await invoke<LocationItem[]>("cloud_get_countries");
       setCountries(data);
       setCountriesLoaded(true);
-    } catch (e) {
-      console.error("Failed to load countries:", e);
+    } catch (_e) {
+      // Keep this silent to avoid noisy console errors in non-cloud states.
     }
-  }, [countriesLoaded, canCreateLocationProxy]);
+  }, [countriesLoaded, canCreateLocationProxy, user]);
 
   // Load cached check results for proxies
   React.useEffect(() => {
@@ -1006,6 +1061,11 @@ export function ProfilesDataTable({
 
   const handleProxySelection = React.useCallback(
     async (profileId: string, proxyId: string | null) => {
+      if (!canPerformTeamAction(teamRole, "assign_proxy")) {
+        showErrorToast(t("sync.team.permissionDenied"));
+        return;
+      }
+
       try {
         await invoke("update_profile_proxy", {
           profileId,
@@ -1014,17 +1074,25 @@ export function ProfilesDataTable({
         setProxyOverrides((prev) => ({ ...prev, [profileId]: proxyId }));
         setVpnOverrides((prev) => ({ ...prev, [profileId]: null }));
         await emit("profile-updated");
+        showSuccessToast(t("toasts.success.profileUpdated"));
       } catch (error) {
-        console.error("Failed to update proxy settings:", error);
+        showErrorToast(t("toasts.error.profileUpdateFailed"), {
+          description: extractRootError(error),
+        });
       } finally {
         setOpenProxySelectorFor(null);
       }
     },
-    [],
+    [t, teamRole],
   );
 
   const handleVpnSelection = React.useCallback(
     async (profileId: string, vpnId: string | null) => {
+      if (!canPerformTeamAction(teamRole, "update_profile_vpn")) {
+        showErrorToast(t("sync.team.permissionDenied"));
+        return;
+      }
+
       try {
         await invoke("update_profile_vpn", {
           profileId,
@@ -1033,17 +1101,25 @@ export function ProfilesDataTable({
         setVpnOverrides((prev) => ({ ...prev, [profileId]: vpnId }));
         setProxyOverrides((prev) => ({ ...prev, [profileId]: null }));
         await emit("profile-updated");
+        showSuccessToast(t("toasts.success.profileUpdated"));
       } catch (error) {
-        console.error("Failed to update VPN settings:", error);
+        showErrorToast(t("toasts.error.profileUpdateFailed"), {
+          description: extractRootError(error),
+        });
       } finally {
         setOpenProxySelectorFor(null);
       }
     },
-    [],
+    [t, teamRole],
   );
 
   const handleCreateCountryProxy = React.useCallback(
     async (profileId: string, country: LocationItem) => {
+      if (!canPerformTeamAction(teamRole, "assign_proxy")) {
+        showErrorToast(t("sync.team.permissionDenied"));
+        return;
+      }
+
       try {
         await invoke("create_cloud_location_proxy", {
           name: country.name,
@@ -1065,10 +1141,12 @@ export function ProfilesDataTable({
         }
         setOpenProxySelectorFor(null);
       } catch (error) {
-        console.error("Failed to create country proxy:", error);
+        showErrorToast(t("toasts.error.proxyCreateFailed"), {
+          description: extractRootError(error),
+        });
       }
     },
-    [handleProxySelection],
+    [handleProxySelection, t, teamRole],
   );
 
   // Use shared browser state hook
@@ -1232,11 +1310,14 @@ export function ProfilesDataTable({
       const profile = profiles.find((p) => p.id === profileId);
       if (profile) {
         const isRunning =
-          browserState.isClient && runningProfiles.has(profile.id);
+          (browserState.isClient && runningProfiles.has(profile.id)) ||
+          profile.runtime_state === "Running";
+        const isParked = profile.runtime_state === "Parked";
         const isLaunching = launchingProfiles.has(profile.id);
         const isStopping = stoppingProfiles.has(profile.id);
+        const isChecking = checkingProfiles.has(profile.id);
 
-        if (isRunning || isLaunching || isStopping) {
+        if (isRunning || isParked || isLaunching || isStopping || isChecking) {
           newSet.delete(profileId);
           hasChanges = true;
         }
@@ -1251,6 +1332,7 @@ export function ProfilesDataTable({
     runningProfiles,
     launchingProfiles,
     stoppingProfiles,
+    checkingProfiles,
     browserState.isClient,
     onSelectedProfilesChange,
     selectedProfiles,
@@ -1393,10 +1475,19 @@ export function ProfilesDataTable({
             profiles
               .filter((profile) => {
                 const isRunning =
-                  browserState.isClient && runningProfiles.has(profile.id);
+                  (browserState.isClient && runningProfiles.has(profile.id)) ||
+                  profile.runtime_state === "Running";
+                const isParked = profile.runtime_state === "Parked";
                 const isLaunching = launchingProfiles.has(profile.id);
                 const isStopping = stoppingProfiles.has(profile.id);
-                return !isRunning && !isLaunching && !isStopping;
+                const isChecking = checkingProfiles.has(profile.id);
+                return (
+                  !isRunning &&
+                  !isParked &&
+                  !isLaunching &&
+                  !isStopping &&
+                  !isChecking
+                );
               })
               .map((profile) => profile.id),
           )
@@ -1412,6 +1503,7 @@ export function ProfilesDataTable({
       runningProfiles,
       launchingProfiles,
       stoppingProfiles,
+      checkingProfiles,
     ],
   );
 
@@ -1419,10 +1511,15 @@ export function ProfilesDataTable({
   const selectableProfiles = React.useMemo(() => {
     return profiles.filter((profile) => {
       const isRunning =
-        browserState.isClient && runningProfiles.has(profile.id);
+        (browserState.isClient && runningProfiles.has(profile.id)) ||
+        profile.runtime_state === "Running";
+      const isParked = profile.runtime_state === "Parked";
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
-      return !isRunning && !isLaunching && !isStopping;
+      const isChecking = checkingProfiles.has(profile.id);
+      return (
+        !isRunning && !isParked && !isLaunching && !isStopping && !isChecking
+      );
     });
   }, [
     profiles,
@@ -1430,6 +1527,7 @@ export function ProfilesDataTable({
     runningProfiles,
     launchingProfiles,
     stoppingProfiles,
+    checkingProfiles,
   ]);
 
   // Build table meta from volatile state so columns can stay stable
@@ -1443,6 +1541,7 @@ export function ProfilesDataTable({
       runningProfiles,
       launchingProfiles,
       stoppingProfiles,
+      checkingProfiles,
       isUpdating,
       browserState,
 
@@ -1493,6 +1592,7 @@ export function ProfilesDataTable({
       // Launch/stop helpers
       setLaunchingProfiles,
       setStoppingProfiles,
+      setCheckingProfiles,
       onKillProfile,
       onLaunchProfile,
 
@@ -1502,6 +1602,10 @@ export function ProfilesDataTable({
       onConfigureCamoufox,
       onCopyCookiesToProfile,
       onOpenCookieManagement,
+      onPinProfile,
+      onUnpinProfile,
+      isProfilePinned: (profileId: string) =>
+        isProfilePinned?.(profileId) ?? false,
 
       // Traffic snapshots (lightweight real-time data)
       trafficSnapshots,
@@ -1527,6 +1631,7 @@ export function ProfilesDataTable({
       isProfileLockedByAnother: isProfileLocked,
       getProfileLockEmail: (profileId: string) =>
         getLockInfo(profileId)?.lockedByEmail,
+      isReadOnlyRole,
     }),
     [
       t,
@@ -1537,6 +1642,7 @@ export function ProfilesDataTable({
       runningProfiles,
       launchingProfiles,
       stoppingProfiles,
+      checkingProfiles,
       isUpdating,
       browserState,
       tagsOverrides,
@@ -1570,6 +1676,9 @@ export function ProfilesDataTable({
       onConfigureCamoufox,
       onCopyCookiesToProfile,
       onOpenCookieManagement,
+      onPinProfile,
+      onUnpinProfile,
+      isProfilePinned,
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
@@ -1581,6 +1690,7 @@ export function ProfilesDataTable({
       handleCreateCountryProxy,
       isProfileLocked,
       getLockInfo,
+      isReadOnlyRole,
     ],
   );
 
@@ -1598,7 +1708,7 @@ export function ProfilesDataTable({
                   meta.selectableCount !== 0
                 }
                 onCheckedChange={(value) => meta.handleToggleAll(!!value)}
-                aria-label="Select all"
+                aria-label={t("profiles.table.selectAll")}
                 className="cursor-pointer"
               />
             </span>
@@ -1613,10 +1723,12 @@ export function ProfilesDataTable({
 
           const isSelected = meta.isProfileSelected(profile.id);
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isDisabled = isRunning || isLaunching || isStopping;
+          const isDisabled = isRunning || isParked || isLaunching || isStopping;
 
           // Cross-OS profiles: show OS icon when checkboxes aren't visible, show checkbox when they are
           if (isCrossOs && !meta.showCheckboxes && !isSelected) {
@@ -1638,7 +1750,7 @@ export function ProfilesDataTable({
                       type="button"
                       className="flex justify-center items-center p-0 border-none cursor-pointer"
                       onClick={() => meta.handleIconClick(profile.id)}
-                      aria-label="Select profile"
+                      aria-label={t("profiles.table.selectProfile")}
                     >
                       <span className="w-4 h-4 group">
                         <OsIcon className="w-4 h-4 text-muted-foreground group-hover:hidden" />
@@ -1672,7 +1784,7 @@ export function ProfilesDataTable({
                     onCheckedChange={(value) =>
                       meta.handleCheckboxChange(profile.id, !!value)
                     }
-                    aria-label="Select row"
+                    aria-label={t("profiles.table.selectRow")}
                     className="w-4 h-4"
                   />
                 </span>
@@ -1682,12 +1794,14 @@ export function ProfilesDataTable({
 
           if (isDisabled) {
             const tooltipMessage = isRunning
-              ? "Can't modify running profile"
-              : isLaunching
-                ? "Can't modify profile while launching"
-                : isStopping
-                  ? "Can't modify profile while stopping"
-                  : "Can't modify profile while browser is updating";
+              ? t("profiles.table.cannotModifyRunning")
+              : isParked
+                ? t("profiles.table.cannotModifyRunning")
+                : isLaunching
+                  ? t("profiles.table.cannotModifyLaunching")
+                  : isStopping
+                    ? t("profiles.table.cannotModifyStopping")
+                    : t("profiles.table.cannotModifyUpdating");
 
             return (
               <Tooltip>
@@ -1720,7 +1834,7 @@ export function ProfilesDataTable({
                     onCheckedChange={(value) =>
                       meta.handleCheckboxChange(profile.id, !!value)
                     }
-                    aria-label="Select row"
+                    aria-label={t("profiles.table.selectRow")}
                     className="w-4 h-4"
                   />
                 </span>
@@ -1739,7 +1853,7 @@ export function ProfilesDataTable({
                   type="button"
                   className="flex justify-center items-center p-0 border-none cursor-pointer"
                   onClick={() => meta.handleIconClick(profile.id)}
-                  aria-label="Select profile"
+                  aria-label={t("profiles.table.selectProfile")}
                 >
                   <span className="w-4 h-4 group">
                     {IconComponent && (
@@ -1758,13 +1872,17 @@ export function ProfilesDataTable({
       },
       {
         id: "actions",
+        header: t("profiles.table.actions"),
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
+          const isChecking = meta.checkingProfiles.has(profile.id);
           const isLockedByAnother = meta.isProfileLockedByAnother(profile.id);
           const canLaunch =
             meta.browserState.canLaunchProfile(profile) && !isLockedByAnother;
@@ -1790,6 +1908,55 @@ export function ProfilesDataTable({
           };
 
           const handleProfileLaunch = async (profile: BrowserProfile) => {
+            const hasProxyOverride = Object.hasOwn(
+              meta.proxyOverrides,
+              profile.id,
+            );
+            const effectiveProxyId = hasProxyOverride
+              ? meta.proxyOverrides[profile.id]
+              : (profile.proxy_id ?? null);
+            const effectiveProxy = effectiveProxyId
+              ? (meta.storedProxies.find((p) => p.id === effectiveProxyId) ??
+                null)
+              : null;
+            const hasVpnOverride = Object.hasOwn(meta.vpnOverrides, profile.id);
+            const effectiveVpnId = hasVpnOverride
+              ? meta.vpnOverrides[profile.id]
+              : (profile.vpn_id ?? null);
+            const effectiveVpn = effectiveVpnId
+              ? (meta.vpnConfigs.find((v) => v.id === effectiveVpnId) ?? null)
+              : null;
+
+            if (effectiveProxy && !effectiveVpn) {
+              meta.setCheckingProfiles((prev: Set<string>) =>
+                new Set(prev).add(profile.id),
+              );
+              try {
+                const result = await invoke<ProxyCheckResult>(
+                  "check_proxy_validity",
+                  {
+                    proxyId: effectiveProxy.id,
+                    proxySettings: effectiveProxy.proxy_settings,
+                  },
+                );
+                setProxyCheckResults((prev) => ({
+                  ...prev,
+                  [effectiveProxy.id]: result,
+                }));
+              } catch (error) {
+                showErrorToast(meta.t("toasts.error.profileLaunchFailed"), {
+                  description: extractRootError(error),
+                });
+                throw error;
+              } finally {
+                meta.setCheckingProfiles((prev: Set<string>) => {
+                  const next = new Set(prev);
+                  next.delete(profile.id);
+                  return next;
+                });
+              }
+            }
+
             meta.setLaunchingProfiles((prev: Set<string>) =>
               new Set(prev).add(profile.id),
             );
@@ -1811,11 +1978,13 @@ export function ProfilesDataTable({
                 <TooltipTrigger asChild>
                   <span className="inline-flex">
                     <RippleButton
-                      variant={isRunning ? "destructive" : "default"}
+                      variant={isRunning ? "secondary" : "default"}
                       size="sm"
-                      disabled={!canLaunch || isLaunching || isStopping}
+                      disabled={
+                        !canLaunch || isLaunching || isStopping || isChecking
+                      }
                       className={cn(
-                        "min-w-[70px] h-7",
+                        "min-w-[96px] h-7",
                         !canLaunch && "opacity-50 cursor-not-allowed",
                         canLaunch && "cursor-pointer",
                       )}
@@ -1825,14 +1994,17 @@ export function ProfilesDataTable({
                           : handleProfileLaunch(profile)
                       }
                     >
-                      {isLaunching || isStopping ? (
+                      {isChecking || isLaunching || isStopping ? (
                         <div className="flex gap-1 items-center">
-                          <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
+                          <LuLoaderCircle className="w-3.5 h-3.5 animate-spin" />
+                          <span>{meta.t("common.buttons.loading")}</span>
                         </div>
                       ) : isRunning ? (
-                        "Stop"
+                        meta.t("profiles.actions.stop")
+                      ) : isParked ? (
+                        meta.t("profiles.actions.resume")
                       ) : (
-                        "Launch"
+                        meta.t("profiles.actions.launch")
                       )}
                     </RippleButton>
                   </span>
@@ -1841,6 +2013,95 @@ export function ProfilesDataTable({
                   <TooltipContent>{tooltipContent}</TooltipContent>
                 )}
               </Tooltip>
+            </div>
+          );
+        },
+      },
+      {
+        id: "runtime",
+        header: t("profiles.table.status"),
+        size: 160,
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          const profile = row.original;
+          const isRunning =
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
+          const isLaunching = meta.launchingProfiles.has(profile.id);
+          const isStopping = meta.stoppingProfiles.has(profile.id);
+          const isChecking = meta.checkingProfiles.has(profile.id);
+          const hasProxyOverride = Object.hasOwn(
+            meta.proxyOverrides,
+            profile.id,
+          );
+          const effectiveProxyId = hasProxyOverride
+            ? meta.proxyOverrides[profile.id]
+            : (profile.proxy_id ?? null);
+          const hasVpnOverride = Object.hasOwn(meta.vpnOverrides, profile.id);
+          const effectiveVpnId = hasVpnOverride
+            ? meta.vpnOverrides[profile.id]
+            : (profile.vpn_id ?? null);
+          const proxyCheckResult = effectiveProxyId
+            ? (meta.proxyCheckResults[effectiveProxyId] ?? null)
+            : null;
+
+          return (
+            <div className="flex gap-2 items-center">
+              <Badge
+                variant={isRunning ? "default" : "secondary"}
+                className="gap-1 px-2 py-0"
+              >
+                {isChecking ? (
+                  <>
+                    <LuLoaderCircle className="w-3 h-3 animate-spin" />
+                    <span>{meta.t("proxies.check.tooltips.checking")}</span>
+                  </>
+                ) : isLaunching ? (
+                  <>
+                    <LuPlay className="w-3 h-3" />
+                    <span>{meta.t("common.buttons.loading")}</span>
+                  </>
+                ) : isStopping ? (
+                  <>
+                    <LuSquare className="w-3 h-3" />
+                    <span>{meta.t("common.buttons.loading")}</span>
+                  </>
+                ) : isRunning ? (
+                  <>
+                    <LuPlay className="w-3 h-3" />
+                    <span>{meta.t("common.status.running")}</span>
+                  </>
+                ) : isParked ? (
+                  <>
+                    <LuPause className="w-3 h-3" />
+                    <span>{meta.t("profiles.actions.resume")}</span>
+                  </>
+                ) : (
+                  <>
+                    <LuClock3 className="w-3 h-3" />
+                    <span>{meta.t("common.status.stopped")}</span>
+                  </>
+                )}
+              </Badge>
+              {effectiveProxyId && !effectiveVpnId && proxyCheckResult && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center">
+                      {proxyCheckResult.is_valid ? (
+                        <LuShieldCheck className="w-3.5 h-3.5 text-muted-foreground" />
+                      ) : (
+                        <LuShieldAlert className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {proxyCheckResult.is_valid
+                      ? `${proxyCheckResult.ip || "-"} ${proxyCheckResult.country || ""}`.trim()
+                      : meta.t("common.status.error")}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           );
         },
@@ -1856,7 +2117,7 @@ export function ProfilesDataTable({
               }
               className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
             >
-              Name
+              {t("profiles.table.name")}
               {column.getIsSorted() === "asc" ? (
                 <LuChevronUp className="ml-2 w-4 h-4" />
               ) : column.getIsSorted() === "desc" ? (
@@ -1910,19 +2171,24 @@ export function ProfilesDataTable({
                       meta.setRenameError(null);
                     }
                   }}
-                  className="w-30 h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
+                  className="w-48 h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
                 />
               </div>
             );
           }
 
+          const NAME_TRIM_LENGTH = 24;
           const display =
-            name.length < 14 ? (
-              <div className="font-medium text-left leading-none">{name}</div>
+            name.length <= NAME_TRIM_LENGTH ? (
+              <div className="font-medium text-left leading-none truncate">
+                {name}
+              </div>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="leading-none">{trimName(name, 14)}</span>
+                  <span className="leading-none">
+                    {trimName(name, NAME_TRIM_LENGTH)}
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>{name}</TooltipContent>
               </Tooltip>
@@ -1930,20 +2196,28 @@ export function ProfilesDataTable({
 
           const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning ||
+            isParked ||
+            isLaunching ||
+            isStopping ||
+            isCrossOs ||
+            meta.isReadOnlyRole;
           const lockedEmail = meta.getProfileLockEmail(profile.id);
           const isLocked = meta.isProfileLockedByAnother(profile.id);
+          const isPinned = meta.isProfilePinned(profile.id);
 
           return (
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 className={cn(
-                  "px-2 py-1 mr-auto text-left bg-transparent rounded border-none w-30 h-6",
+                  "px-2 py-1 mr-auto text-left bg-transparent rounded border-none w-48 h-6",
                   isDisabled
                     ? "opacity-60 cursor-not-allowed"
                     : "cursor-pointer hover:bg-accent/50",
@@ -1978,27 +2252,81 @@ export function ProfilesDataTable({
                   </TooltipContent>
                 </Tooltip>
               )}
+              {!meta.isReadOnlyRole && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn("w-6 h-6", isPinned && "text-primary")}
+                      onClick={() => {
+                        if (isPinned) {
+                          meta.onUnpinProfile?.(profile);
+                          return;
+                        }
+                        meta.onPinProfile?.(profile);
+                      }}
+                    >
+                      <LuPin className="w-3.5 h-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isPinned
+                      ? meta.t("profiles.actions.unpin")
+                      : meta.t("profiles.actions.pin")}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           );
         },
       },
       {
+        id: "lastLaunch",
+        header: t("profiles.table.lastLaunch"),
+        size: 120,
+        cell: ({ row }) => {
+          const profile = row.original;
+          if (!profile.last_launch) {
+            return (
+              <span className="text-xs text-muted-foreground">
+                {t("common.labels.none")}
+              </span>
+            );
+          }
+          return (
+            <span className="text-xs text-muted-foreground">
+              {formatRelativeTime(profile.last_launch)}
+            </span>
+          );
+        },
+      },
+      {
         id: "tags",
-        header: "Tags",
+        header: t("profiles.table.tags"),
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning ||
+            isParked ||
+            isLaunching ||
+            isStopping ||
+            isCrossOs ||
+            meta.isReadOnlyRole;
 
           return (
             <TagsCell
               profile={profile}
+              t={meta.t}
               isDisabled={isDisabled}
               tagsOverrides={meta.tagsOverrides || {}}
               allTags={meta.allTags || []}
@@ -2012,21 +2340,29 @@ export function ProfilesDataTable({
       },
       {
         id: "note",
-        header: "Note",
+        header: t("profiles.table.note"),
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning ||
+            isParked ||
+            isLaunching ||
+            isStopping ||
+            isCrossOs ||
+            meta.isReadOnlyRole;
 
           return (
             <NoteCell
               profile={profile}
+              t={meta.t}
               isDisabled={isDisabled}
               noteOverrides={meta.noteOverrides || {}}
               openNoteEditorFor={meta.openNoteEditorFor || null}
@@ -2038,17 +2374,24 @@ export function ProfilesDataTable({
       },
       {
         id: "proxy",
-        header: "Proxy / VPN",
+        header: t("profiles.table.proxy"),
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
+            (meta.isClient && meta.runningProfiles.has(profile.id)) ||
+            profile.runtime_state === "Running";
+          const isParked = profile.runtime_state === "Parked";
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning ||
+            isParked ||
+            isLaunching ||
+            isStopping ||
+            isCrossOs ||
+            meta.isReadOnlyRole;
 
           const hasProxyOverride = Object.hasOwn(
             meta.proxyOverrides,
@@ -2160,8 +2503,8 @@ export function ProfilesDataTable({
                       <CommandInput
                         placeholder={
                           meta.canCreateLocationProxy
-                            ? "Search proxies, VPNs, or countries..."
-                            : "Search proxies or VPNs..."
+                            ? meta.t("profiles.table.proxySearchWithCountries")
+                            : meta.t("profiles.table.proxySearch")
                         }
                         onFocus={() => {
                           if (meta.canCreateLocationProxy)
@@ -2169,7 +2512,9 @@ export function ProfilesDataTable({
                         }}
                       />
                       <CommandList>
-                        <CommandEmpty>No proxies or VPNs found.</CommandEmpty>
+                        <CommandEmpty>
+                          {meta.t("profiles.table.proxyEmpty")}
+                        </CommandEmpty>
                         <CommandGroup>
                           <CommandItem
                             value="__none__"
@@ -2185,7 +2530,7 @@ export function ProfilesDataTable({
                                   : "opacity-0",
                               )}
                             />
-                            None
+                            {meta.t("profiles.table.none")}
                           </CommandItem>
                           {meta.storedProxies.map((proxy) => (
                             <CommandItem
@@ -2211,7 +2556,7 @@ export function ProfilesDataTable({
                           ))}
                         </CommandGroup>
                         {meta.vpnConfigs.length > 0 && (
-                          <CommandGroup heading="VPNs">
+                          <CommandGroup heading={meta.t("profiles.table.vpns")}>
                             {meta.vpnConfigs.map((vpn) => (
                               <CommandItem
                                 key={vpn.id}
@@ -2244,7 +2589,9 @@ export function ProfilesDataTable({
                         )}
                         {meta.canCreateLocationProxy &&
                           meta.countries.length > 0 && (
-                            <CommandGroup heading="Create by country">
+                            <CommandGroup
+                              heading={meta.t("profiles.table.createByCountry")}
+                            >
                               {meta.countries
                                 .filter(
                                   (c) =>
@@ -2318,6 +2665,7 @@ export function ProfilesDataTable({
             | undefined;
 
           const dot = getProfileSyncStatusDot(
+            meta.t,
             profile,
             liveStatus,
             syncEntry?.error,
@@ -2359,7 +2707,9 @@ export function ProfilesDataTable({
                 disabled={!meta.isClient}
                 onClick={() => setProfileForInfoDialog(profile)}
               >
-                <span className="sr-only">Profile info</span>
+                <span className="sr-only">
+                  {t("profiles.table.profileInfo")}
+                </span>
                 <LuInfo className="w-4 h-4" />
               </Button>
             </div>
@@ -2382,10 +2732,15 @@ export function ProfilesDataTable({
     enableRowSelection: (row) => {
       const profile = row.original;
       const isRunning =
-        browserState.isClient && runningProfiles.has(profile.id);
+        (browserState.isClient && runningProfiles.has(profile.id)) ||
+        profile.runtime_state === "Running";
+      const isParked = profile.runtime_state === "Parked";
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
-      return !isRunning && !isLaunching && !isStopping;
+      const isChecking = checkingProfiles.has(profile.id);
+      return (
+        !isRunning && !isParked && !isLaunching && !isStopping && !isChecking
+      );
     },
     getSortedRowModel: getSortedRowModel(),
     getCoreRowModel: getCoreRowModel(),
@@ -2473,7 +2828,7 @@ export function ProfilesDataTable({
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  No profiles found.
+                  {t("profiles.noResults")}
                 </TableCell>
               </TableRow>
             )}
@@ -2484,21 +2839,29 @@ export function ProfilesDataTable({
         isOpen={profileToDelete !== null}
         onClose={() => setProfileToDelete(null)}
         onConfirm={handleDelete}
-        title="Delete Profile"
-        description={`This action cannot be undone. This will permanently delete the profile "${profileToDelete?.name}" and all its associated data.`}
-        confirmButtonText="Delete Profile"
+        title={t("profiles.table.deleteProfileTitle")}
+        description={t("profiles.table.deleteProfileDescription", {
+          name: profileToDelete?.name ?? "",
+        })}
+        confirmButtonText={t("profiles.actions.delete")}
         isLoading={isDeleting}
       />
       {profileForInfoDialog &&
         (() => {
           const infoProfile = profileForInfoDialog;
           const infoIsRunning =
-            browserState.isClient && runningProfiles.has(infoProfile.id);
+            (browserState.isClient && runningProfiles.has(infoProfile.id)) ||
+            infoProfile.runtime_state === "Running";
+          const infoIsParked = infoProfile.runtime_state === "Parked";
           const infoIsLaunching = launchingProfiles.has(infoProfile.id);
           const infoIsStopping = stoppingProfiles.has(infoProfile.id);
           const infoIsCrossOs = isCrossOsProfile(infoProfile);
           const infoIsDisabled =
-            infoIsRunning || infoIsLaunching || infoIsStopping || infoIsCrossOs;
+            infoIsRunning ||
+            infoIsParked ||
+            infoIsLaunching ||
+            infoIsStopping ||
+            infoIsCrossOs;
           return (
             <ProfileInfoDialog
               isOpen={profileForInfoDialog !== null}
@@ -2522,8 +2885,14 @@ export function ProfilesDataTable({
                 setProfileForInfoDialog(null);
                 setProfileToDelete(profile);
               }}
+              onArchiveProfile={onArchiveProfile}
+              onRestoreProfile={onRestoreProfile}
+              isArchived={isProfileArchived?.(infoProfile.id) ?? false}
+              onPinProfile={onPinProfile}
+              onUnpinProfile={onUnpinProfile}
+              isPinned={isProfilePinned?.(infoProfile.id) ?? false}
               crossOsUnlocked={crossOsUnlocked}
-              isRunning={infoIsRunning}
+              isRunning={infoIsRunning || infoIsParked}
               isDisabled={infoIsDisabled}
               isCrossOs={infoIsCrossOs}
               syncStatuses={syncStatuses}
@@ -2534,7 +2903,7 @@ export function ProfilesDataTable({
         <DataTableActionBarSelection table={table} />
         {onBulkGroupAssignment && (
           <DataTableActionBarAction
-            tooltip="Assign to Group"
+            tooltip={t("profiles.actions.assignToGroup")}
             onClick={onBulkGroupAssignment}
             size="icon"
           >
@@ -2543,7 +2912,7 @@ export function ProfilesDataTable({
         )}
         {onBulkProxyAssignment && (
           <DataTableActionBarAction
-            tooltip="Assign Proxy"
+            tooltip={t("profiles.table.assignProxy")}
             onClick={onBulkProxyAssignment}
             size="icon"
           >
@@ -2554,8 +2923,8 @@ export function ProfilesDataTable({
           <DataTableActionBarAction
             tooltip={
               crossOsUnlocked
-                ? "Assign Extension Group"
-                : "Assign Extension Group (Pro)"
+                ? t("profiles.table.assignExtensionGroup")
+                : t("profiles.table.assignExtensionGroupPro")
             }
             onClick={onBulkExtensionGroupAssignment}
             size="icon"
@@ -2573,7 +2942,11 @@ export function ProfilesDataTable({
         )}
         {onBulkCopyCookies && (
           <DataTableActionBarAction
-            tooltip={crossOsUnlocked ? "Copy Cookies" : "Copy Cookies (Pro)"}
+            tooltip={
+              crossOsUnlocked
+                ? t("profiles.actions.copyCookies")
+                : `${t("profiles.actions.copyCookies")} (Pro)`
+            }
             onClick={onBulkCopyCookies}
             size="icon"
             disabled={!crossOsUnlocked}
@@ -2590,13 +2963,22 @@ export function ProfilesDataTable({
         )}
         {onBulkDelete && (
           <DataTableActionBarAction
-            tooltip="Delete"
+            tooltip={t("common.buttons.delete")}
             onClick={onBulkDelete}
             size="icon"
             variant="destructive"
             className="border-destructive bg-destructive/50 hover:bg-destructive/70"
           >
             <LuTrash2 />
+          </DataTableActionBarAction>
+        )}
+        {onBulkArchive && (
+          <DataTableActionBarAction
+            tooltip={t("profiles.actions.archive")}
+            onClick={onBulkArchive}
+            size="icon"
+          >
+            <LuArchive />
           </DataTableActionBarAction>
         )}
       </DataTableActionBar>

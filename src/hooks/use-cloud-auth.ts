@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { normalizeTeamRole } from "@/lib/team-permissions";
 import type { CloudAuthState, CloudUser } from "@/types";
 
 interface UseCloudAuthReturn {
@@ -17,17 +18,32 @@ export function useCloudAuth(): UseCloudAuthReturn {
   const [authState, setAuthState] = useState<CloudAuthState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const normalizeUser = useCallback((user: CloudUser): CloudUser => {
+    const normalizedRole = normalizeTeamRole(user.teamRole);
+    return {
+      ...user,
+      teamRole: normalizedRole ?? undefined,
+    };
+  }, []);
+
   const loadUser = useCallback(async () => {
     try {
       const state = await invoke<CloudAuthState | null>("cloud_get_user");
-      setAuthState(state);
+      setAuthState(
+        state
+          ? {
+              ...state,
+              user: normalizeUser(state.user),
+            }
+          : null,
+      );
     } catch (error) {
       console.error("Failed to load cloud auth state:", error);
       setAuthState(null);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [normalizeUser]);
 
   useEffect(() => {
     loadUser();
@@ -60,10 +76,11 @@ export function useCloudAuth(): UseCloudAuthReturn {
         email,
         code,
       });
-      setAuthState(state);
-      return state;
+      const normalizedState = { ...state, user: normalizeUser(state.user) };
+      setAuthState(normalizedState);
+      return normalizedState;
     },
-    [],
+    [normalizeUser],
   );
 
   const logout = useCallback(async () => {
@@ -72,14 +89,16 @@ export function useCloudAuth(): UseCloudAuthReturn {
   }, []);
 
   const refreshProfile = useCallback(async (): Promise<CloudUser> => {
-    const user = await invoke<CloudUser>("cloud_refresh_profile");
+    const user = normalizeUser(
+      await invoke<CloudUser>("cloud_refresh_profile"),
+    );
     setAuthState((prev) =>
       prev
         ? { ...prev, user }
         : { user, logged_in_at: new Date().toISOString() },
     );
     return user;
-  }, []);
+  }, [normalizeUser]);
 
   return {
     user: authState?.user ?? null,

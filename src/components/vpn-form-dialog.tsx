@@ -266,7 +266,7 @@ export function VpnFormDialog({
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-4">
+        <ScrollArea className="max-h-[60vh]">
           <div className="grid gap-4 py-2">
             {!editingVpn && (
               <div className="grid gap-2">

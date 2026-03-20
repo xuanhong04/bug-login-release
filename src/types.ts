@@ -35,6 +35,7 @@ export interface BrowserProfile {
   proxy_bypass_rules?: string[];
   created_by_id?: string;
   created_by_email?: string;
+  runtime_state?: RuntimeState;
 }
 
 export interface Extension {
@@ -62,6 +63,12 @@ export interface ExtensionGroup {
 export type SyncMode = "Disabled" | "Regular" | "Encrypted";
 
 export type SyncStatus = "Disabled" | "Syncing" | "Synced" | "Error";
+export type RuntimeState =
+  | "Running"
+  | "Parked"
+  | "Stopped"
+  | "Crashed"
+  | "Terminating";
 
 export interface SyncSettings {
   sync_server_url?: string;
@@ -81,8 +88,10 @@ export interface CloudUser {
   proxyBandwidthExtraMb: number;
   teamId?: string;
   teamName?: string;
-  teamRole?: string;
+  teamRole?: TeamRole;
 }
+
+export type TeamRole = "owner" | "admin" | "member" | "viewer";
 
 export interface ProfileLockInfo {
   profileId: string;
@@ -107,6 +116,14 @@ export interface ProxyCheckResult {
   city?: string;
   country?: string;
   country_code?: string;
+  zip?: string;
+  timezone?: string;
+  latitude?: number;
+  longitude?: number;
+  isp?: string;
+  org?: string;
+  asn?: string;
+  mobile?: boolean;
   timestamp: number;
   is_valid: boolean;
 }
@@ -637,6 +654,19 @@ export interface ParsedProxyLine {
   original_line: string;
 }
 
+export interface ProxyProtocolBenchmarkResult {
+  protocol: string;
+  is_valid: boolean;
+  latency_ms?: number;
+  ip?: string;
+  error?: string;
+}
+
+export interface ProxyProtocolBenchmark {
+  best_protocol?: string;
+  checks: ProxyProtocolBenchmarkResult[];
+}
+
 export type ProxyParseResult =
   | ({ status: "parsed" } & ParsedProxyLine)
   | { status: "ambiguous"; line: string; possible_formats: string[] }
@@ -672,3 +702,5 @@ export interface VpnStatus {
   bytes_received?: number;
   last_handshake?: number;
 }
+
+export type AppSection = "profiles" | "proxies" | "settings" | "integrations";

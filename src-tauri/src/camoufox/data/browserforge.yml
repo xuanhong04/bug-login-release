@@ -40,10 +40,6 @@ screen:
   # devicePixelRatio is not recommended. Any value other than 1.0 is suspicious.
   pageXOffset: screen.pageXOffset
   pageYOffset: screen.pageYOffset
-  outerHeight: window.outerHeight
-  outerWidth: window.outerWidth
-  innerHeight: window.innerHeight
-  innerWidth: window.innerWidth
   screenX: window.screenX
   screenY: window.screenY
   # Tends to generate out of bounds (network inconsistencies):

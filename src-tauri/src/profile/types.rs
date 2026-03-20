@@ -14,6 +14,16 @@ pub enum SyncStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RuntimeState {
+  Running,
+  Parked,
+  #[default]
+  Stopped,
+  Crashed,
+  Terminating,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SyncMode {
   #[default]
   Disabled,
@@ -65,6 +75,8 @@ pub struct BrowserProfile {
   pub created_by_id: Option<String>,
   #[serde(default)]
   pub created_by_email: Option<String>,
+  #[serde(default)]
+  pub runtime_state: RuntimeState,
 }
 
 pub fn default_release_type() -> String {
@@ -104,5 +116,9 @@ impl BrowserProfile {
   /// Returns true if sync uses E2E encryption.
   pub fn is_encrypted_sync(&self) -> bool {
     self.sync_mode == SyncMode::Encrypted
+  }
+
+  pub fn is_parked(&self) -> bool {
+    self.runtime_state == RuntimeState::Parked
   }
 }

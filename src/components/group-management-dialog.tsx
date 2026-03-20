@@ -269,6 +269,7 @@ export function GroupManagementDialog({
                     </TableHeader>
                     <TableBody>
                       {groups.map((group) => {
+                        const isDefaultGroup = group.id === "default";
                         const syncDot = getSyncStatusDot(
                           group,
                           groupSyncStatus[group.id],
@@ -305,6 +306,7 @@ export function GroupManagementDialog({
                                         handleToggleSync(group)
                                       }
                                       disabled={
+                                        isDefaultGroup ||
                                         isTogglingSync[group.id] ||
                                         groupInUse[group.id]
                                       }
@@ -312,7 +314,12 @@ export function GroupManagementDialog({
                                   </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  {groupInUse[group.id] ? (
+                                  {isDefaultGroup ? (
+                                    <p>
+                                      The default group cannot be edited or
+                                      synced
+                                    </p>
+                                  ) : groupInUse[group.id] ? (
                                     <p>
                                       Sync cannot be disabled while this group
                                       is used by synced profiles
@@ -335,12 +342,17 @@ export function GroupManagementDialog({
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => handleEditGroup(group)}
+                                      disabled={isDefaultGroup}
                                     >
                                       <LuPencil className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Edit group</p>
+                                    <p>
+                                      {isDefaultGroup
+                                        ? "The default group cannot be renamed"
+                                        : "Edit group"}
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
@@ -349,12 +361,17 @@ export function GroupManagementDialog({
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => handleDeleteGroup(group)}
+                                      disabled={isDefaultGroup}
                                     >
                                       <LuTrash2 className="w-4 h-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Delete group</p>
+                                    <p>
+                                      {isDefaultGroup
+                                        ? "The default group cannot be deleted"
+                                        : "Delete group"}
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                               </div>

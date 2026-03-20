@@ -52,9 +52,23 @@ fn main() {
   // This ensures tauri_build is re-run after sidecar binaries are copied
   println!("cargo:rerun-if-changed=binaries");
 
+  if is_clippy_build() {
+    println!(
+      "cargo:warning=Skipping tauri_build during clippy analysis to avoid sidecar file locks."
+    );
+
+    #[cfg(target_os = "windows")]
+    embed_windows_manifest();
+
+    return;
+  }
+
   // Only run tauri_build if all external binaries exist.
   // This allows building the proxy sidecar without the other binaries present.
   if external_binaries_exist() {
+    #[cfg(target_os = "windows")]
+    stop_locked_dev_binaries();
+
     tauri_build::build();
 
     // tauri_build embeds the manifest for bin targets only (cargo:rustc-link-arg-bins).
@@ -73,6 +87,44 @@ fn main() {
     #[cfg(target_os = "windows")]
     embed_windows_manifest();
   }
+}
+
+#[cfg(target_os = "windows")]
+fn stop_locked_dev_binaries() {
+  use std::path::PathBuf;
+  use std::process::Command;
+
+  let manifest_dir = match std::env::var("CARGO_MANIFEST_DIR") {
+    Ok(dir) => dir,
+    Err(_) => return,
+  };
+
+  let target_dir = PathBuf::from(manifest_dir).join("target");
+  let target_prefix = target_dir.to_string_lossy().into_owned();
+
+  for process_name in ["buglogin-daemon.exe", "buglogin-proxy.exe"] {
+    let script = format!(
+      "$targetPrefix = '{target_prefix}'; \
+       Get-CimInstance Win32_Process -Filter \"Name = '{process_name}'\" | \
+       Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith($targetPrefix, [System.StringComparison]::OrdinalIgnoreCase) }} | \
+       ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"
+    );
+
+    let _ = Command::new("powershell")
+      .args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        &script,
+      ])
+      .output();
+  }
+}
+
+fn is_clippy_build() -> bool {
+  std::env::var_os("CARGO_CFG_CLIPPY").is_some() || std::env::var_os("CLIPPY_ARGS").is_some()
 }
 
 fn external_binaries_exist() -> bool {
@@ -113,6 +165,7 @@ fn ensure_dist_folder_exists() {
 
   let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
   let dist_dir = PathBuf::from(&manifest_dir).join("..").join("dist");
+  let dev_dir = dist_dir.join("dev");
 
   if !dist_dir.exists() {
     fs::create_dir_all(&dist_dir).expect("Failed to create dist directory");
@@ -125,6 +178,15 @@ fn ensure_dist_folder_exists() {
     println!(
       "cargo:warning=Created stub dist folder for compilation. Run 'pnpm build' for full frontend."
     );
+  }
+
+  if !dev_dir.exists() {
+    fs::create_dir_all(&dev_dir).expect("Failed to create dist/dev directory");
+  }
+
+  let dev_lock_path = dev_dir.join("lock");
+  if !dev_lock_path.exists() {
+    fs::write(&dev_lock_path, "stub").expect("Failed to create dist/dev/lock");
   }
 
   println!("cargo:rerun-if-changed=../dist");
@@ -196,9 +258,7 @@ fn generate_tray_icons() {
     }
 
     let output_path = icons_dir.join(filename);
-    pixmap
-      .save_png(&output_path)
-      .expect("Failed to save tray icon PNG");
+    save_png_if_changed(&pixmap, &output_path);
   }
 
   // Generate a full-color icon for Windows tray (no template conversion)
@@ -213,8 +273,18 @@ fn generate_tray_icons() {
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
     let output_path = icons_dir.join("tray-icon-win-44.png");
-    pixmap
-      .save_png(&output_path)
-      .expect("Failed to save Windows tray icon PNG");
+    save_png_if_changed(&pixmap, &output_path);
   }
+}
+
+fn save_png_if_changed(pixmap: &resvg::tiny_skia::Pixmap, output_path: &std::path::Path) {
+  let png_bytes = pixmap.encode_png().expect("Failed to encode tray icon PNG");
+
+  if let Ok(existing) = std::fs::read(output_path) {
+    if existing == png_bytes {
+      return;
+    }
+  }
+
+  std::fs::write(output_path, png_bytes).expect("Failed to save tray icon PNG");
 }

@@ -86,8 +86,54 @@ pub struct ProxyCheckResult {
   pub city: Option<String>,
   pub country: Option<String>,
   pub country_code: Option<String>,
+  #[serde(default)]
+  pub zip: Option<String>,
+  #[serde(default)]
+  pub timezone: Option<String>,
+  #[serde(default)]
+  pub latitude: Option<f64>,
+  #[serde(default)]
+  pub longitude: Option<f64>,
+  #[serde(default)]
+  pub isp: Option<String>,
+  #[serde(default)]
+  pub org: Option<String>,
+  #[serde(default)]
+  pub asn: Option<String>,
+  #[serde(default)]
+  pub mobile: Option<bool>,
   pub timestamp: u64,
   pub is_valid: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProxyGeoInfo {
+  pub city: Option<String>,
+  pub country: Option<String>,
+  pub country_code: Option<String>,
+  pub zip: Option<String>,
+  pub timezone: Option<String>,
+  pub latitude: Option<f64>,
+  pub longitude: Option<f64>,
+  pub isp: Option<String>,
+  pub org: Option<String>,
+  pub asn: Option<String>,
+  pub mobile: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyProtocolBenchmarkResult {
+  pub protocol: String,
+  pub is_valid: bool,
+  pub latency_ms: Option<u64>,
+  pub ip: Option<String>,
+  pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyProtocolBenchmark {
+  pub best_protocol: Option<String>,
+  pub checks: Vec<ProxyProtocolBenchmarkResult>,
 }
 
 pub const CLOUD_PROXY_ID: &str = "cloud-included-proxy";
@@ -151,6 +197,31 @@ pub struct ProxyManager {
 }
 
 impl ProxyManager {
+  fn protocol_priority(protocol: &str) -> usize {
+    match protocol {
+      "socks5" => 0,
+      "https" => 1,
+      "http" => 2,
+      "socks4" => 3,
+      _ => 99,
+    }
+  }
+
+  fn select_best_protocol(checks: &[ProxyProtocolBenchmarkResult]) -> Option<String> {
+    checks
+      .iter()
+      .filter(|check| check.is_valid)
+      .min_by(|left, right| {
+        let left_latency = left.latency_ms.unwrap_or(u64::MAX);
+        let right_latency = right.latency_ms.unwrap_or(u64::MAX);
+
+        left_latency.cmp(&right_latency).then_with(|| {
+          Self::protocol_priority(&left.protocol).cmp(&Self::protocol_priority(&right.protocol))
+        })
+      })
+      .map(|check| check.protocol.clone())
+  }
+
   pub fn new() -> Self {
     let manager = Self {
       active_proxies: Mutex::new(HashMap::new()),
@@ -225,12 +296,10 @@ impl ProxyManager {
       .as_secs()
   }
 
-  pub async fn get_ip_geolocation(
-    ip: &str,
-  ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+  pub async fn get_ip_geolocation(ip: &str) -> Result<ProxyGeoInfo, String> {
     // Use ip-api.com (free, no API key required)
     let url = format!(
-      "http://ip-api.com/json/{}?fields=status,message,country,countryCode,city",
+      "http://ip-api.com/json/{}?fields=status,message,country,countryCode,city,regionName,zip,timezone,lat,lon,isp,org,as,mobile",
       ip
     );
 
@@ -245,27 +314,51 @@ impl ProxyManager {
           match response.json::<serde_json::Value>().await {
             Ok(json) => {
               if json.get("status").and_then(|s| s.as_str()) == Some("success") {
-                let country = json
-                  .get("country")
-                  .and_then(|v| v.as_str())
-                  .map(|s| s.to_string());
-                let country_code = json
-                  .get("countryCode")
-                  .and_then(|v| v.as_str())
-                  .map(|s| s.to_string());
-                let city = json
-                  .get("city")
-                  .and_then(|v| v.as_str())
-                  .map(|s| s.to_string());
-                Ok((city, country, country_code))
+                Ok(ProxyGeoInfo {
+                  city: json
+                    .get("city")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  country: json
+                    .get("country")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  country_code: json
+                    .get("countryCode")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  zip: json
+                    .get("zip")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  timezone: json
+                    .get("timezone")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  latitude: json.get("lat").and_then(|v| v.as_f64()),
+                  longitude: json.get("lon").and_then(|v| v.as_f64()),
+                  isp: json
+                    .get("isp")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  org: json
+                    .get("org")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  asn: json
+                    .get("as")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                  mobile: json.get("mobile").and_then(|v| v.as_bool()),
+                })
               } else {
-                Ok((None, None, None))
+                Ok(ProxyGeoInfo::default())
               }
             }
             Err(e) => Err(format!("Failed to parse geolocation response: {e}")),
           }
         } else {
-          Ok((None, None, None))
+          Ok(ProxyGeoInfo::default())
         }
       }
       Err(e) => Err(format!("Failed to fetch geolocation: {e}")),
@@ -388,6 +481,15 @@ impl ProxyManager {
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
+    }
+    if let Err(e) = events::emit_audit_event(
+      "create",
+      "proxy",
+      Some(&stored_proxy.id),
+      "success",
+      Some(&format!("Created proxy '{}'", stored_proxy.name)),
+    ) {
+      log::warn!("Failed to emit audit event for proxy create: {e}");
     }
 
     if stored_proxy.sync_enabled {
@@ -693,6 +795,15 @@ impl ProxyManager {
     if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
+    if let Err(e) = events::emit_audit_event(
+      "update",
+      "proxy",
+      Some(&updated_proxy.id),
+      "success",
+      Some(&format!("Updated proxy '{}'", updated_proxy.name)),
+    ) {
+      log::warn!("Failed to emit audit event for proxy update: {e}");
+    }
 
     if updated_proxy.sync_enabled {
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
@@ -765,6 +876,15 @@ impl ProxyManager {
     if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
+    if let Err(e) = events::emit_audit_event(
+      "delete",
+      "proxy",
+      Some(proxy_id),
+      "success",
+      Some("Deleted proxy"),
+    ) {
+      log::warn!("Failed to emit audit event for proxy delete: {e}");
+    }
 
     Ok(())
   }
@@ -806,16 +926,47 @@ impl ProxyManager {
     url
   }
 
-  // Check if a proxy is valid by making HTTP requests through it
+  // Check if a proxy is valid by routing through a temporary local BugLogin proxy.
+  // This validates the same runtime path used when profiles actually launch.
   pub async fn check_proxy_validity(
     &self,
     proxy_id: &str,
     proxy_settings: &ProxySettings,
   ) -> Result<ProxyCheckResult, String> {
-    let proxy_url = Self::build_proxy_url(proxy_settings);
+    let upstream_url = Self::build_proxy_url(proxy_settings);
+    let start_result = crate::proxy_runner::start_proxy_process(Some(upstream_url.clone()), None)
+      .await
+      .map_err(|e| e.to_string());
 
-    // Fetch public IP through the proxy using shared IP utilities
-    let ip = match ip_utils::fetch_public_ip(Some(&proxy_url)).await {
+    let ip_result = match start_result {
+      Ok(proxy_config) => {
+        let test_proxy_id = proxy_config.id.clone();
+        let local_port = match proxy_config.local_port {
+          Some(port) if port > 0 => port,
+          _ => {
+            let _ = crate::proxy_runner::stop_proxy_process(&test_proxy_id).await;
+            return Err("Failed to resolve local proxy port for validation".to_string());
+          }
+        };
+
+        let local_proxy_url = format!("http://127.0.0.1:{local_port}");
+        let ip_result = ip_utils::fetch_public_ip(Some(&local_proxy_url)).await;
+
+        // Always stop temporary proxy to avoid orphan workers.
+        let _ = crate::proxy_runner::stop_proxy_process(&test_proxy_id).await;
+        ip_result
+      }
+      Err(worker_start_error) => {
+        log::warn!(
+          "Failed to start test proxy via worker ({}), falling back to direct upstream check",
+          worker_start_error
+        );
+        // Fallback: validate upstream proxy directly when worker startup is unstable.
+        ip_utils::fetch_public_ip(Some(&upstream_url)).await
+      }
+    };
+
+    let ip = match ip_result {
       Ok(ip) => ip,
       Err(e) => {
         // Save failed check result
@@ -824,6 +975,14 @@ impl ProxyManager {
           city: None,
           country: None,
           country_code: None,
+          zip: None,
+          timezone: None,
+          latitude: None,
+          longitude: None,
+          isp: None,
+          org: None,
+          asn: None,
+          mobile: None,
           timestamp: Self::get_current_timestamp(),
           is_valid: false,
         };
@@ -833,15 +992,22 @@ impl ProxyManager {
     };
 
     // Get geolocation
-    let (city, country, country_code): (Option<String>, Option<String>, Option<String>) =
-      Self::get_ip_geolocation(&ip).await.unwrap_or_default();
+    let geo_info = Self::get_ip_geolocation(&ip).await.unwrap_or_default();
 
     // Create successful result
     let result = ProxyCheckResult {
       ip: ip.clone(),
-      city,
-      country,
-      country_code,
+      city: geo_info.city,
+      country: geo_info.country,
+      country_code: geo_info.country_code,
+      zip: geo_info.zip,
+      timezone: geo_info.timezone,
+      latitude: geo_info.latitude,
+      longitude: geo_info.longitude,
+      isp: geo_info.isp,
+      org: geo_info.org,
+      asn: geo_info.asn,
+      mobile: geo_info.mobile,
       timestamp: Self::get_current_timestamp(),
       is_valid: true,
     };
@@ -850,6 +1016,67 @@ impl ProxyManager {
     let _ = self.save_proxy_check_cache(proxy_id, &result);
 
     Ok(result)
+  }
+
+  pub async fn benchmark_proxy_protocols(
+    &self,
+    host: String,
+    port: u16,
+    username: Option<String>,
+    password: Option<String>,
+  ) -> ProxyProtocolBenchmark {
+    use tokio::time::{timeout, Duration, Instant};
+
+    let mut checks = Vec::new();
+    let protocols = ["http", "https", "socks4", "socks5"];
+
+    for protocol in protocols {
+      let settings = ProxySettings {
+        proxy_type: protocol.to_string(),
+        host: host.clone(),
+        port,
+        username: username.clone(),
+        password: password.clone(),
+      };
+
+      let proxy_url = Self::build_proxy_url(&settings);
+      let started = Instant::now();
+      let result = timeout(
+        Duration::from_secs(3),
+        ip_utils::fetch_public_ip(Some(&proxy_url)),
+      )
+      .await;
+
+      match result {
+        Ok(Ok(ip)) => checks.push(ProxyProtocolBenchmarkResult {
+          protocol: protocol.to_string(),
+          is_valid: true,
+          latency_ms: Some(started.elapsed().as_millis() as u64),
+          ip: Some(ip),
+          error: None,
+        }),
+        Ok(Err(error)) => checks.push(ProxyProtocolBenchmarkResult {
+          protocol: protocol.to_string(),
+          is_valid: false,
+          latency_ms: None,
+          ip: None,
+          error: Some(error.to_string()),
+        }),
+        Err(_) => checks.push(ProxyProtocolBenchmarkResult {
+          protocol: protocol.to_string(),
+          is_valid: false,
+          latency_ms: None,
+          ip: None,
+          error: Some("Timeout".to_string()),
+        }),
+      }
+    }
+
+    let best_protocol = Self::select_best_protocol(&checks);
+    ProxyProtocolBenchmark {
+      best_protocol,
+      checks,
+    }
   }
 
   // Get cached proxy check result
@@ -913,7 +1140,16 @@ impl ProxyManager {
         continue;
       }
 
-      results.push(Self::parse_single_proxy_line(line));
+      let parsed_line = Self::parse_single_proxy_line(line);
+      if Self::is_invalid_parse_result(&parsed_line) {
+        if let Some(batch_results) = Self::try_parse_batch_line(line) {
+          results.extend(batch_results);
+        } else {
+          results.push(parsed_line);
+        }
+      } else {
+        results.push(parsed_line);
+      }
       index += 1;
     }
 
@@ -929,7 +1165,7 @@ impl ProxyManager {
     let mut consumed = 0;
     let mut original_lines = Vec::new();
 
-    for raw_line in lines.iter().take(6) {
+    for raw_line in lines.iter().take(8) {
       let line = raw_line.trim();
       if line.is_empty() || line.starts_with('#') {
         if consumed == 0 {
@@ -938,11 +1174,11 @@ impl ProxyManager {
         break;
       }
 
-      let Some((label, value)) = line.split_once(':') else {
+      let Some((label, value)) = Self::split_key_value(line) else {
         break;
       };
 
-      let value = value.trim();
+      let value = value.trim().trim_matches('"').trim_matches('\'');
       if value.is_empty() {
         break;
       }
@@ -952,10 +1188,15 @@ impl ProxyManager {
         ProxyField::Port(port_type) => {
           let parsed_port = value.parse::<u16>().ok()?;
           port = Some(parsed_port);
-          proxy_type = port_type.unwrap_or_else(|| proxy_type.clone());
+          proxy_type = port_type.unwrap_or(proxy_type.as_str()).to_string();
         }
         ProxyField::Username => username = Some(value.to_string()),
         ProxyField::Password => password = Some(value.to_string()),
+        ProxyField::ProxyType => {
+          proxy_type = Self::normalize_proxy_type(value)
+            .unwrap_or("http")
+            .to_string();
+        }
         ProxyField::Unknown => break,
       }
 
@@ -988,21 +1229,29 @@ impl ProxyManager {
     let normalized = label.trim().to_lowercase();
 
     if normalized.contains("http port") {
-      return ProxyField::Port(Some("http".to_string()));
+      return ProxyField::Port(Some("http"));
     }
     if normalized.contains("https port") {
-      return ProxyField::Port(Some("https".to_string()));
+      return ProxyField::Port(Some("https"));
     }
     if normalized.contains("socks5 port") || normalized.contains("socks port") {
-      return ProxyField::Port(Some("socks5".to_string()));
+      return ProxyField::Port(Some("socks5"));
     }
     if normalized.contains("socks4 port") {
-      return ProxyField::Port(Some("socks4".to_string()));
+      return ProxyField::Port(Some("socks4"));
     }
     if normalized == "port" {
       return ProxyField::Port(None);
     }
-    if normalized == "ip" || normalized == "host" || normalized == "server" || normalized == "proxy"
+    if normalized == "type" || normalized == "protocol" || normalized == "scheme" {
+      return ProxyField::ProxyType;
+    }
+    if normalized == "ip"
+      || normalized == "host"
+      || normalized == "server"
+      || normalized == "proxy"
+      || normalized == "address"
+      || normalized == "domain"
     {
       return ProxyField::Host;
     }
@@ -1025,6 +1274,203 @@ impl ProxyManager {
     ProxyField::Unknown
   }
 
+  fn split_key_value(line: &str) -> Option<(&str, &str)> {
+    for separator in [":", "=", "："] {
+      if let Some((label, value)) = line.split_once(separator) {
+        return Some((label, value));
+      }
+    }
+    None
+  }
+
+  fn normalize_proxy_type(value: &str) -> Option<&'static str> {
+    match value.trim().to_lowercase().as_str() {
+      "http" => Some("http"),
+      "https" => Some("https"),
+      "socks" | "socks5" => Some("socks5"),
+      "socks4" => Some("socks4"),
+      _ => None,
+    }
+  }
+
+  fn looks_like_host(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.eq_ignore_ascii_case("localhost")
+      || trimmed.contains('.')
+      || trimmed.contains('[')
+      || trimmed.contains(']')
+      || trimmed.contains('-')
+  }
+
+  fn is_invalid_parse_result(result: &ProxyParseResult) -> bool {
+    matches!(result, ProxyParseResult::Invalid { .. })
+  }
+
+  fn try_parse_batch_line(line: &str) -> Option<Vec<ProxyParseResult>> {
+    for separator in [',', ';', '\t'] {
+      if !line.contains(separator) {
+        continue;
+      }
+
+      let segments: Vec<&str> = line
+        .split(separator)
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+        .collect();
+
+      if segments.len() < 2 {
+        continue;
+      }
+
+      let parsed: Vec<ProxyParseResult> = segments
+        .iter()
+        .map(|segment| Self::parse_single_proxy_line(segment))
+        .collect();
+
+      if parsed
+        .iter()
+        .all(|result| !Self::is_invalid_parse_result(result))
+      {
+        return Some(parsed);
+      }
+    }
+
+    let ws_segments: Vec<&str> = line
+      .split_whitespace()
+      .map(str::trim)
+      .filter(|segment| !segment.is_empty())
+      .collect();
+
+    if ws_segments.len() >= 2
+      && ws_segments
+        .iter()
+        .all(|segment| segment.contains(':') || segment.contains("://") || segment.contains('@'))
+    {
+      let parsed: Vec<ProxyParseResult> = ws_segments
+        .iter()
+        .map(|segment| Self::parse_single_proxy_line(segment))
+        .collect();
+
+      if parsed
+        .iter()
+        .all(|result| !Self::is_invalid_parse_result(result))
+      {
+        return Some(parsed);
+      }
+    }
+
+    None
+  }
+
+  fn parse_tokens(tokens: &[&str], line: &str) -> Option<ProxyParseResult> {
+    let mut parts: Vec<&str> = tokens
+      .iter()
+      .map(|part| part.trim())
+      .filter(|part| !part.is_empty())
+      .collect();
+
+    if parts.is_empty() {
+      return None;
+    }
+
+    let mut proxy_type = "http".to_string();
+    if let Some(first) = parts
+      .first()
+      .and_then(|value| Self::normalize_proxy_type(value))
+    {
+      proxy_type = first.to_string();
+      parts.remove(0);
+    } else if let Some(last) = parts
+      .last()
+      .and_then(|value| Self::normalize_proxy_type(value))
+    {
+      proxy_type = last.to_string();
+      parts.pop();
+    }
+
+    match parts.len() {
+      2 => {
+        let port = parts[1].parse::<u16>().ok()?;
+        Some(ProxyParseResult::Parsed(ParsedProxyLine {
+          proxy_type,
+          host: parts[0].to_string(),
+          port,
+          username: None,
+          password: None,
+          original_line: line.to_string(),
+        }))
+      }
+      3 => {
+        let port = parts[1].parse::<u16>().ok()?;
+        Some(ProxyParseResult::Parsed(ParsedProxyLine {
+          proxy_type,
+          host: parts[0].to_string(),
+          port,
+          username: Some(parts[2].to_string()),
+          password: None,
+          original_line: line.to_string(),
+        }))
+      }
+      4 => {
+        let port_at_1 = parts[1].parse::<u16>().ok();
+        let port_at_3 = parts[3].parse::<u16>().ok();
+
+        match (port_at_1, port_at_3) {
+          (Some(port), None) => Some(ProxyParseResult::Parsed(ParsedProxyLine {
+            proxy_type,
+            host: parts[0].to_string(),
+            port,
+            username: Some(parts[2].to_string()),
+            password: Some(parts[3].to_string()),
+            original_line: line.to_string(),
+          })),
+          (None, Some(port)) => Some(ProxyParseResult::Parsed(ParsedProxyLine {
+            proxy_type,
+            host: parts[2].to_string(),
+            port,
+            username: Some(parts[0].to_string()),
+            password: Some(parts[1].to_string()),
+            original_line: line.to_string(),
+          })),
+          (Some(port_left), Some(port_right)) => {
+            let left_looks_like_host = Self::looks_like_host(parts[0]);
+            let right_looks_like_host = Self::looks_like_host(parts[2]);
+
+            if left_looks_like_host && !right_looks_like_host {
+              Some(ProxyParseResult::Parsed(ParsedProxyLine {
+                proxy_type,
+                host: parts[0].to_string(),
+                port: port_left,
+                username: Some(parts[2].to_string()),
+                password: Some(parts[3].to_string()),
+                original_line: line.to_string(),
+              }))
+            } else if right_looks_like_host && !left_looks_like_host {
+              Some(ProxyParseResult::Parsed(ParsedProxyLine {
+                proxy_type,
+                host: parts[2].to_string(),
+                port: port_right,
+                username: Some(parts[0].to_string()),
+                password: Some(parts[1].to_string()),
+                original_line: line.to_string(),
+              }))
+            } else {
+              Some(ProxyParseResult::Ambiguous {
+                line: line.to_string(),
+                possible_formats: vec![
+                  "host:port:username:password".to_string(),
+                  "username:password:host:port".to_string(),
+                ],
+              })
+            }
+          }
+          (None, None) => None,
+        }
+      }
+      _ => None,
+    }
+  }
+
   // Parse a single proxy line with format auto-detection
   fn parse_single_proxy_line(line: &str) -> ProxyParseResult {
     // Format 1: protocol://username:password@host:port (full URL)
@@ -1032,88 +1478,29 @@ impl ProxyManager {
       return result;
     }
 
-    // Try colon-separated formats
-    let parts: Vec<&str> = line.split(':').collect();
+    if let Some(result) = Self::try_parse_user_pass_at_host_port(line) {
+      return result;
+    }
 
-    match parts.len() {
-      // host:port (no auth)
-      2 => {
-        if let Ok(port) = parts[1].parse::<u16>() {
-          return ProxyParseResult::Parsed(ParsedProxyLine {
-            proxy_type: "http".to_string(),
-            host: parts[0].to_string(),
-            port,
-            username: None,
-            password: None,
-            original_line: line.to_string(),
-          });
-        }
-        ProxyParseResult::Invalid {
-          line: line.to_string(),
-          reason: "Invalid port number".to_string(),
-        }
-      }
-      // Could be: host:port:user or user:pass@host (with @ in the middle)
-      3 => {
-        // Try username:password@host:port first
-        if let Some(result) = Self::try_parse_user_pass_at_host_port(line) {
+    for delimiter in [':', ';', '|', ',', '\t'] {
+      if line.contains(delimiter) {
+        let parts: Vec<&str> = line.split(delimiter).collect();
+        if let Some(result) = Self::parse_tokens(&parts, line) {
           return result;
         }
-        ProxyParseResult::Invalid {
-          line: line.to_string(),
-          reason: "Could not determine format with 3 parts".to_string(),
-        }
       }
-      // 4 parts: could be host:port:user:pass OR user:pass:host:port
-      4 => {
-        // Try to detect which format
-        let port_at_1 = parts[1].parse::<u16>().is_ok();
-        let port_at_3 = parts[3].parse::<u16>().is_ok();
+    }
 
-        match (port_at_1, port_at_3) {
-          // host:port:user:pass
-          (true, false) => {
-            let port = parts[1].parse::<u16>().unwrap();
-            ProxyParseResult::Parsed(ParsedProxyLine {
-              proxy_type: "http".to_string(),
-              host: parts[0].to_string(),
-              port,
-              username: Some(parts[2].to_string()),
-              password: Some(parts[3].to_string()),
-              original_line: line.to_string(),
-            })
-          }
-          // user:pass:host:port
-          (false, true) => {
-            let port = parts[3].parse::<u16>().unwrap();
-            ProxyParseResult::Parsed(ParsedProxyLine {
-              proxy_type: "http".to_string(),
-              host: parts[2].to_string(),
-              port,
-              username: Some(parts[0].to_string()),
-              password: Some(parts[1].to_string()),
-              original_line: line.to_string(),
-            })
-          }
-          // Both could be ports - ambiguous
-          (true, true) => ProxyParseResult::Ambiguous {
-            line: line.to_string(),
-            possible_formats: vec![
-              "host:port:username:password".to_string(),
-              "username:password:host:port".to_string(),
-            ],
-          },
-          // Neither is a valid port
-          (false, false) => ProxyParseResult::Invalid {
-            line: line.to_string(),
-            reason: "No valid port number found".to_string(),
-          },
-        }
+    let whitespace_parts: Vec<&str> = line.split_whitespace().collect();
+    if whitespace_parts.len() > 1 {
+      if let Some(result) = Self::parse_tokens(&whitespace_parts, line) {
+        return result;
       }
-      _ => ProxyParseResult::Invalid {
-        line: line.to_string(),
-        reason: format!("Unexpected format with {} parts", parts.len()),
-      },
+    }
+
+    ProxyParseResult::Invalid {
+      line: line.to_string(),
+      reason: "Unsupported proxy format".to_string(),
     }
   }
 
@@ -1800,9 +2187,10 @@ impl ProxyManager {
 
 enum ProxyField {
   Host,
-  Port(Option<String>),
+  Port(Option<&'static str>),
   Username,
   Password,
+  ProxyType,
   Unknown,
 }
 
@@ -1836,6 +2224,7 @@ mod tests {
       .parent()
       .unwrap()
       .to_path_buf();
+    let build_profile = if cfg!(windows) { "release" } else { "debug" };
     let proxy_binary_name = if cfg!(windows) {
       "buglogin-proxy.exe"
     } else {
@@ -1844,7 +2233,7 @@ mod tests {
     let proxy_binary = project_root
       .join("src-tauri")
       .join("target")
-      .join("debug")
+      .join(build_profile)
       .join(proxy_binary_name);
 
     // Check if binary already exists
@@ -1854,8 +2243,14 @@ mod tests {
 
     println!("Building buglogin-proxy binary for tests...");
 
+    let mut build_args = vec!["build"];
+    if cfg!(windows) {
+      build_args.push("--release");
+    }
+    build_args.extend(["--bin", "buglogin-proxy"]);
+
     let build_status = Command::new("cargo")
-      .args(["build", "--bin", "buglogin-proxy"])
+      .args(build_args)
       .current_dir(project_root.join("src-tauri"))
       .status()
       .await?;
@@ -1919,6 +2314,86 @@ mod tests {
     );
     assert!(empty_settings.username.is_none(), "Username should be None");
     assert!(empty_settings.password.is_none(), "Password should be None");
+  }
+
+  #[test]
+  fn test_select_best_protocol_prefers_lowest_latency() {
+    let checks = vec![
+      ProxyProtocolBenchmarkResult {
+        protocol: "http".to_string(),
+        is_valid: true,
+        latency_ms: Some(120),
+        ip: None,
+        error: None,
+      },
+      ProxyProtocolBenchmarkResult {
+        protocol: "socks5".to_string(),
+        is_valid: true,
+        latency_ms: Some(80),
+        ip: None,
+        error: None,
+      },
+      ProxyProtocolBenchmarkResult {
+        protocol: "https".to_string(),
+        is_valid: true,
+        latency_ms: Some(90),
+        ip: None,
+        error: None,
+      },
+    ];
+
+    let best = ProxyManager::select_best_protocol(&checks);
+    assert_eq!(best.as_deref(), Some("socks5"));
+  }
+
+  #[test]
+  fn test_select_best_protocol_uses_deterministic_tiebreaker() {
+    let checks = vec![
+      ProxyProtocolBenchmarkResult {
+        protocol: "http".to_string(),
+        is_valid: true,
+        latency_ms: Some(100),
+        ip: None,
+        error: None,
+      },
+      ProxyProtocolBenchmarkResult {
+        protocol: "https".to_string(),
+        is_valid: true,
+        latency_ms: Some(100),
+        ip: None,
+        error: None,
+      },
+      ProxyProtocolBenchmarkResult {
+        protocol: "socks5".to_string(),
+        is_valid: true,
+        latency_ms: Some(100),
+        ip: None,
+        error: None,
+      },
+    ];
+
+    let best = ProxyManager::select_best_protocol(&checks);
+    assert_eq!(best.as_deref(), Some("socks5"));
+  }
+
+  #[test]
+  fn test_parse_txt_proxies_supports_whitespace_batch_line() {
+    let input = "1.1.1.1:80:user1:pass1 2.2.2.2:8080:user2:pass2";
+    let results = ProxyManager::parse_txt_proxies(input);
+
+    assert_eq!(results.len(), 2);
+    assert!(matches!(results[0], ProxyParseResult::Parsed(_)));
+    assert!(matches!(results[1], ProxyParseResult::Parsed(_)));
+  }
+
+  #[test]
+  fn test_parse_txt_proxies_supports_comma_batch_line() {
+    let input = "socks5://3.3.3.3:1080,https://4.4.4.4:443";
+    let results = ProxyManager::parse_txt_proxies(input);
+
+    assert_eq!(results.len(), 2);
+    assert!(matches!(results[0], ProxyParseResult::Parsed(_)));
+    assert!(matches!(results[1], ProxyParseResult::Parsed(_)));
   }
 
   #[tokio::test]

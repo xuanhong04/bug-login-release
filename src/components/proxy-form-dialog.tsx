@@ -1,9 +1,11 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { emit } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,21 +15,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { StoredProxy } from "@/types";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import type {
+  ProxyCheckResult,
+  ProxyParseResult,
+  ProxyProtocolBenchmark,
+  StoredProxy,
+} from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface ProxyFormData {
   name: string;
-  proxy_type: string;
+  quickInput: string;
+  proxy_type: "http" | "https" | "socks4" | "socks5";
   host: string;
-  port: number;
+  port: string;
   username: string;
   password: string;
 }
@@ -43,12 +45,19 @@ export function ProxyFormDialog({
   onClose,
   editingProxy,
 }: ProxyFormDialogProps) {
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [checkResult, setCheckResult] = useState<ProxyCheckResult | null>(null);
+
   const [formData, setFormData] = useState<ProxyFormData>({
     name: "",
-    proxy_type: "http",
+    quickInput: "",
+    proxy_type: "socks5",
     host: "",
-    port: 8080,
+    port: "8080",
     username: "",
     password: "",
   });
@@ -56,80 +65,250 @@ export function ProxyFormDialog({
   const resetForm = useCallback(() => {
     setFormData({
       name: "",
-      proxy_type: "http",
+      quickInput: "",
+      proxy_type: "socks5",
       host: "",
-      port: 8080,
+      port: "8080",
       username: "",
       password: "",
     });
+    setCheckResult(null);
   }, []);
 
-  // Load editing proxy data when dialog opens
   useEffect(() => {
-    if (isOpen) {
-      if (editingProxy) {
-        setFormData({
-          name: editingProxy.name,
-          proxy_type: editingProxy.proxy_settings.proxy_type,
-          host: editingProxy.proxy_settings.host,
-          port: editingProxy.proxy_settings.port,
-          username: editingProxy.proxy_settings.username || "",
-          password: editingProxy.proxy_settings.password || "",
-        });
-      } else {
-        resetForm();
-      }
-    }
-  }, [isOpen, editingProxy, resetForm]);
+    if (!isOpen) return;
 
-  const handleSubmit = useCallback(async () => {
-    if (!formData.name.trim()) {
-      toast.error("Proxy name is required");
+    if (editingProxy) {
+      setFormData({
+        name: editingProxy.name,
+        quickInput: "",
+        proxy_type:
+          (editingProxy.proxy_settings
+            .proxy_type as ProxyFormData["proxy_type"]) || "http",
+        host: editingProxy.proxy_settings.host,
+        port: String(editingProxy.proxy_settings.port),
+        username: editingProxy.proxy_settings.username || "",
+        password: editingProxy.proxy_settings.password || "",
+      });
+      setCheckResult(null);
       return;
     }
 
-    if (!formData.host.trim() || !formData.port) {
-      toast.error("Host and port are required");
+    resetForm();
+  }, [editingProxy, isOpen, resetForm]);
+
+  const parsedPort = useMemo(
+    () => Number.parseInt(formData.port, 10),
+    [formData.port],
+  );
+
+  const isFormValid =
+    formData.name.trim().length > 0 &&
+    formData.host.trim().length > 0 &&
+    Number.isFinite(parsedPort) &&
+    parsedPort > 0 &&
+    parsedPort <= 65535;
+
+  const proxySettings = useMemo(() => {
+    if (!isFormValid) {
+      return null;
+    }
+
+    return {
+      proxy_type: formData.proxy_type,
+      host: formData.host.trim(),
+      port: parsedPort,
+      username: formData.username.trim() || undefined,
+      password: formData.password.trim() || undefined,
+    };
+  }, [
+    formData.host,
+    formData.password,
+    formData.proxy_type,
+    formData.username,
+    isFormValid,
+    parsedPort,
+  ]);
+
+  const handleQuickParse = useCallback(async () => {
+    const content = formData.quickInput.trim();
+    if (!content) {
+      showErrorToast(t("proxies.form.quickAdd.validation.empty"));
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      const results = await invoke<ProxyParseResult[]>("parse_txt_proxies", {
+        content,
+      });
+      const parsed = results.find(
+        (result): result is Extract<ProxyParseResult, { status: "parsed" }> =>
+          result.status === "parsed",
+      );
+
+      if (!parsed) {
+        showErrorToast(
+          t("proxies.form.quickAdd.validation.noValid", { count: 1 }),
+        );
+        return;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        proxy_type:
+          (parsed.proxy_type as ProxyFormData["proxy_type"]) || "http",
+        host: parsed.host,
+        port: String(parsed.port),
+        username: parsed.username ?? "",
+        password: parsed.password ?? "",
+      }));
+      setCheckResult(null);
+      showSuccessToast(t("proxies.form.quickAdd.parseSuccess"));
+
+      try {
+        setIsBenchmarking(true);
+        const benchmark = await invoke<ProxyProtocolBenchmark>(
+          "benchmark_proxy_protocols",
+          {
+            host: parsed.host,
+            port: parsed.port,
+            username: parsed.username ?? null,
+            password: parsed.password ?? null,
+          },
+        );
+        if (benchmark.best_protocol) {
+          setFormData((prev) => ({
+            ...prev,
+            proxy_type: benchmark.best_protocol as ProxyFormData["proxy_type"],
+          }));
+          showSuccessToast(
+            t("proxies.form.autoType.applied", {
+              protocol: benchmark.best_protocol.toUpperCase(),
+            }),
+          );
+        }
+      } catch {
+        // Keep parsed type when benchmark fails.
+      } finally {
+        setIsBenchmarking(false);
+      }
+    } catch (error) {
+      showErrorToast(t("proxies.form.quickAdd.parseFailed"));
+      console.error("Failed to parse proxy quick input:", error);
+    } finally {
+      setIsParsing(false);
+    }
+  }, [formData.quickInput, t]);
+
+  const handleAutoSelectProxyType = useCallback(async () => {
+    if (!proxySettings) {
+      showErrorToast(t("proxies.form.validation.hostPortRequired"));
+      return;
+    }
+
+    setIsBenchmarking(true);
+    try {
+      const benchmark = await invoke<ProxyProtocolBenchmark>(
+        "benchmark_proxy_protocols",
+        {
+          host: formData.host.trim(),
+          port: parsedPort,
+          username: formData.username.trim() || null,
+          password: formData.password.trim() || null,
+        },
+      );
+      if (benchmark.best_protocol) {
+        setFormData((prev) => ({
+          ...prev,
+          proxy_type: benchmark.best_protocol as ProxyFormData["proxy_type"],
+        }));
+        showSuccessToast(
+          t("proxies.form.autoType.applied", {
+            protocol: benchmark.best_protocol.toUpperCase(),
+          }),
+        );
+      } else {
+        showErrorToast(t("proxies.form.autoType.unavailable"));
+      }
+    } catch {
+      showErrorToast(t("proxies.form.autoType.failed"));
+    } finally {
+      setIsBenchmarking(false);
+    }
+  }, [
+    formData.host,
+    formData.password,
+    formData.username,
+    parsedPort,
+    proxySettings,
+    t,
+  ]);
+
+  const handleCheckProxy = useCallback(async () => {
+    if (!proxySettings) {
+      showErrorToast(t("proxies.form.validation.hostPortRequired"));
+      return;
+    }
+
+    setIsChecking(true);
+    try {
+      const result = await invoke<ProxyCheckResult>("check_proxy_validity", {
+        proxyId: editingProxy?.id ?? `draft-${Date.now()}`,
+        proxySettings,
+      });
+      setCheckResult(result);
+      showSuccessToast(
+        t("proxies.check.messages.location", {
+          location:
+            [result.city, result.country].filter(Boolean).join(", ") ||
+            t("proxies.check.unknownLocation"),
+        }),
+      );
+    } catch (error) {
+      setCheckResult(null);
+      showErrorToast(t("proxies.check.messages.failed"));
+      console.error("Failed to check proxy:", error);
+    } finally {
+      setIsChecking(false);
+    }
+  }, [editingProxy?.id, proxySettings, t]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!proxySettings || !formData.name.trim()) {
+      showErrorToast(t("proxies.form.validation.hostPortRequired"));
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const proxySettings = {
-        proxy_type: formData.proxy_type,
-        host: formData.host.trim(),
-        port: formData.port,
-        username: formData.username.trim() || undefined,
-        password: formData.password.trim() || undefined,
-      };
-
       if (editingProxy) {
-        // Update existing proxy
         await invoke("update_stored_proxy", {
           proxyId: editingProxy.id,
           name: formData.name.trim(),
           proxySettings,
         });
-        toast.success("Proxy updated successfully");
+        showSuccessToast(t("proxies.form.messages.updated"));
       } else {
-        // Create new proxy
         await invoke("create_stored_proxy", {
           name: formData.name.trim(),
           proxySettings,
         });
-        toast.success("Proxy created successfully");
+        showSuccessToast(t("proxies.form.messages.created"));
       }
 
+      await emit("stored-proxies-changed");
       onClose();
     } catch (error) {
-      console.error("Failed to save proxy:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      toast.error(`Failed to save proxy: ${errorMessage}`);
+      showErrorToast(
+        t("proxies.form.messages.saveFailed", { error: errorMessage }),
+      );
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, editingProxy, onClose]);
+  }, [editingProxy, formData.name, onClose, proxySettings, t]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
@@ -137,125 +316,213 @@ export function ProxyFormDialog({
     }
   }, [isSubmitting, onClose]);
 
-  const isFormValid =
-    formData.name.trim() &&
-    formData.host.trim() &&
-    formData.port > 0 &&
-    formData.port <= 65535;
-
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {editingProxy ? "Edit Proxy" : "Create New Proxy"}
+            {editingProxy ? t("proxies.edit") : t("proxies.add")}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="proxy-name">Proxy Name</Label>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="proxy-name">{t("proxies.form.name")}</Label>
             <Input
               id="proxy-name"
               value={formData.name}
               onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
+                setFormData((prev) => ({ ...prev, name: e.target.value }))
               }
-              placeholder="e.g. Office Proxy, Home VPN, etc."
+              placeholder={t("proxies.form.namePlaceholder")}
               disabled={isSubmitting}
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label>Proxy Type</Label>
-            <Select
-              value={formData.proxy_type}
-              onValueChange={(value) =>
-                setFormData({ ...formData, proxy_type: value })
-              }
-              disabled={isSubmitting}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select proxy type" />
-              </SelectTrigger>
-              <SelectContent>
-                {["http", "https", "socks4", "socks5"].map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type.toUpperCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-2">
+            <Label htmlFor="proxy-quick-add">
+              {t("proxies.form.quickAdd.label")}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="proxy-quick-add"
+                value={formData.quickInput}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    quickInput: e.target.value,
+                  }))
+                }
+                placeholder={t("proxies.form.quickAdd.singlePlaceholder")}
+                disabled={isSubmitting}
+              />
+              <LoadingButton
+                type="button"
+                variant="outline"
+                size="sm"
+                isLoading={isParsing}
+                onClick={handleQuickParse}
+                disabled={isSubmitting || !formData.quickInput.trim()}
+              >
+                {t("proxies.form.quickAdd.parse")}
+              </LoadingButton>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-host">Host</Label>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label>{t("proxies.form.type")}</Label>
+              <LoadingButton
+                type="button"
+                size="sm"
+                variant="outline"
+                isLoading={isBenchmarking}
+                onClick={handleAutoSelectProxyType}
+                disabled={isSubmitting || !proxySettings}
+              >
+                {t("proxies.form.autoType.button")}
+              </LoadingButton>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {(["http", "https", "socks5", "socks4"] as const).map(
+                (protocol) => (
+                  <Button
+                    key={protocol}
+                    type="button"
+                    variant={
+                      formData.proxy_type === protocol ? "default" : "outline"
+                    }
+                    className="w-full"
+                    disabled={isSubmitting}
+                    onClick={() =>
+                      setFormData((prev) => ({ ...prev, proxy_type: protocol }))
+                    }
+                  >
+                    {t(`proxies.types.${protocol}`)}
+                  </Button>
+                ),
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="proxy-host">{t("proxies.form.host")}</Label>
               <Input
                 id="proxy-host"
                 value={formData.host}
                 onChange={(e) =>
-                  setFormData({ ...formData, host: e.target.value })
+                  setFormData((prev) => ({ ...prev, host: e.target.value }))
                 }
-                placeholder="e.g. 127.0.0.1"
+                placeholder={t("proxies.form.hostPlaceholder")}
                 disabled={isSubmitting}
               />
             </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-port">Port</Label>
+            <div className="space-y-2">
+              <Label htmlFor="proxy-port">{t("proxies.form.port")}</Label>
               <Input
                 id="proxy-port"
-                type="number"
+                inputMode="numeric"
                 value={formData.port}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    port: parseInt(e.target.value, 10) || 0,
-                  })
+                  setFormData((prev) => ({ ...prev, port: e.target.value }))
                 }
-                placeholder="e.g. 8080"
-                min="1"
-                max="65535"
+                placeholder={t("proxies.form.portPlaceholder")}
                 disabled={isSubmitting}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-username">Username (optional)</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="proxy-username">
+                {t("proxies.form.username")}
+              </Label>
               <Input
                 id="proxy-username"
                 value={formData.username}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    username: e.target.value,
-                  })
+                  setFormData((prev) => ({ ...prev, username: e.target.value }))
                 }
-                placeholder="Proxy username"
+                placeholder={t("proxies.form.usernamePlaceholder")}
                 disabled={isSubmitting}
               />
             </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-password">Password (optional)</Label>
+            <div className="space-y-2">
+              <Label htmlFor="proxy-password">
+                {t("proxies.form.password")}
+              </Label>
               <Input
                 id="proxy-password"
                 type="password"
                 value={formData.password}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    password: e.target.value,
-                  })
+                  setFormData((prev) => ({ ...prev, password: e.target.value }))
                 }
-                placeholder="Proxy password"
+                placeholder={t("proxies.form.passwordPlaceholder")}
                 disabled={isSubmitting}
               />
             </div>
           </div>
+
+          <div className="flex justify-end">
+            <LoadingButton
+              type="button"
+              size="sm"
+              variant="outline"
+              isLoading={isChecking}
+              onClick={handleCheckProxy}
+              disabled={isSubmitting || !proxySettings}
+            >
+              {t("proxies.form.check")}
+            </LoadingButton>
+          </div>
+
+          {checkResult?.is_valid && (
+            <div className="p-3 space-y-2 rounded-md border bg-muted/40 text-sm">
+              <div className="flex justify-between items-center">
+                <p className="font-medium">
+                  {checkResult.ip}
+                  {checkResult.country ? ` • ${checkResult.country}` : ""}
+                </p>
+                {checkResult.mobile && (
+                  <span className="px-2 py-0.5 text-xs rounded-md border bg-card text-muted-foreground">
+                    MOBILE
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+                <p>
+                  {t("proxies.check.details.location")}:{" "}
+                  {[checkResult.city, checkResult.country]
+                    .filter(Boolean)
+                    .join(", ") || t("proxies.check.unknownLocation")}
+                </p>
+                <p>
+                  {t("proxies.check.details.zip")}: {checkResult.zip || "-"}
+                </p>
+                <p>
+                  {t("proxies.check.details.timezone")}:{" "}
+                  {checkResult.timezone || "-"}
+                </p>
+                <p>
+                  {t("proxies.check.details.coords")}:{" "}
+                  {checkResult.latitude != null && checkResult.longitude != null
+                    ? `${checkResult.latitude.toFixed(4)}, ${checkResult.longitude.toFixed(4)}`
+                    : "-"}
+                </p>
+                <p>
+                  {t("proxies.check.details.isp")}: {checkResult.isp || "-"}
+                </p>
+                <p>
+                  {t("proxies.check.details.org")}: {checkResult.org || "-"}
+                </p>
+                <p className="col-span-2">
+                  {t("proxies.check.details.asn")}: {checkResult.asn || "-"}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -264,14 +531,16 @@ export function ProxyFormDialog({
             onClick={handleClose}
             disabled={isSubmitting}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
-            isLoading={isSubmitting}
             onClick={handleSubmit}
+            isLoading={isSubmitting}
             disabled={!isFormValid}
           >
-            {editingProxy ? "Update Proxy" : "Create Proxy"}
+            {editingProxy
+              ? t("common.buttons.save")
+              : t("common.buttons.create")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

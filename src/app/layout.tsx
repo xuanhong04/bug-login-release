@@ -1,5 +1,5 @@
 "use client";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "@/styles/globals.css";
 import "flag-icons/css/flag-icons.min.css";
 import { useEffect } from "react";
@@ -12,6 +12,11 @@ import { setupLogging } from "@/lib/logger";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const interSans = Inter({
+  variable: "--font-inter-sans",
   subsets: ["latin"],
 });
 
@@ -32,7 +37,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-hidden bg-background`}
+        className={`${geistSans.variable} ${interSans.variable} ${geistMono.variable} antialiased overflow-hidden bg-background`}
       >
         <I18nProvider>
           <CustomThemeProvider>

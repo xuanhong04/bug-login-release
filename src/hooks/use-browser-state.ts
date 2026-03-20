@@ -39,7 +39,9 @@ export function useBrowserState(
     (browserType: string): boolean => {
       if (!isClient) return false;
       return profiles.some(
-        (p) => p.browser === browserType && runningProfiles.has(p.id),
+        (p) =>
+          p.browser === browserType &&
+          (runningProfiles.has(p.id) || p.runtime_state === "Running"),
       );
     },
     [profiles, runningProfiles, isClient],
@@ -54,7 +56,8 @@ export function useBrowserState(
 
       if (isCrossOsProfile(profile)) return false;
 
-      const isRunning = runningProfiles.has(profile.id);
+      const isRunning =
+        runningProfiles.has(profile.id) || profile.runtime_state === "Running";
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
 
@@ -101,9 +104,13 @@ export function useBrowserState(
 
       // For single-instance browsers
       if (isSingleInstanceBrowser(profile.browser)) {
-        const isRunning = runningProfiles.has(profile.id);
+        const isRunning =
+          runningProfiles.has(profile.id) ||
+          profile.runtime_state === "Running";
         const runningInstancesOfType = profiles.filter(
-          (p) => p.browser === profile.browser && runningProfiles.has(p.id),
+          (p) =>
+            p.browser === profile.browser &&
+            (runningProfiles.has(p.id) || p.runtime_state === "Running"),
         );
 
         // If no instances are running, any profile of this type can be used
@@ -135,12 +142,14 @@ export function useBrowserState(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
 
-      const isRunning = runningProfiles.has(profile.id);
+      const isRunning =
+        runningProfiles.has(profile.id) || profile.runtime_state === "Running";
+      const isParked = profile.runtime_state === "Parked";
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
 
       // If profile is running, launching, or stopping, block selection
-      if (isRunning || isLaunching || isStopping) {
+      if (isRunning || isParked || isLaunching || isStopping) {
         return false;
       }
 
@@ -161,7 +170,8 @@ export function useBrowserState(
         return `This profile was created on ${osName} and is not supported on this system`;
       }
 
-      const isRunning = runningProfiles.has(profile.id);
+      const isRunning =
+        runningProfiles.has(profile.id) || profile.runtime_state === "Running";
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
 
@@ -220,7 +230,9 @@ export function useBrowserState(
 
       if (isSingleInstanceBrowser(profile.browser)) {
         const runningInstancesOfType = profiles.filter(
-          (p) => p.browser === profile.browser && runningProfiles.has(p.id),
+          (p) =>
+            p.browser === profile.browser &&
+            (runningProfiles.has(p.id) || p.runtime_state === "Running"),
         );
 
         if (runningInstancesOfType.length > 0) {

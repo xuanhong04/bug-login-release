@@ -93,7 +93,7 @@ impl TeamLockManager {
     let access_token =
       CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks");
+    let url = format!("{}/api/teams/{}/locks", *CLOUD_API_URL, team_id);
     let response = client
       .post(&url)
       .header("Authorization", format!("Bearer {access_token}"))
@@ -150,7 +150,10 @@ impl TeamLockManager {
     let access_token =
       CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks/{profile_id}");
+    let url = format!(
+      "{}/api/teams/{}/locks/{}",
+      *CLOUD_API_URL, team_id, profile_id
+    );
     let _ = client
       .delete(&url)
       .header("Authorization", format!("Bearer {access_token}"))
@@ -195,7 +198,7 @@ impl TeamLockManager {
     let access_token =
       CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks");
+    let url = format!("{}/api/teams/{}/locks", *CLOUD_API_URL, team_id);
     let response = client
       .get(&url)
       .header("Authorization", format!("Bearer {access_token}"))
@@ -252,7 +255,10 @@ impl TeamLockManager {
         for profile_id in held_locks {
           let client = Client::new();
           if let Ok(Some(token)) = CloudAuthManager::load_access_token() {
-            let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks/{profile_id}/heartbeat");
+            let url = format!(
+              "{}/api/teams/{}/locks/{}/heartbeat",
+              *CLOUD_API_URL, team_id, profile_id
+            );
             let _ = client
               .post(&url)
               .header("Authorization", format!("Bearer {token}"))

@@ -712,6 +712,21 @@ async fn handle_http(
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
+  let method = req.method().clone();
+  let request_uri = req.uri().clone();
+  let request_headers = req.headers().clone();
+
+  if let Some(search_redirect) =
+    build_single_word_search_redirect(&method, &request_uri, &request_headers)
+  {
+    let mut response = Response::new(Full::new(Bytes::new()));
+    *response.status_mut() = StatusCode::FOUND;
+    if let Ok(location) = search_redirect.parse() {
+      response.headers_mut().insert("Location", location);
+    }
+    return Ok(response);
+  }
+
   // Extract domain for traffic tracking
   let domain = req
     .uri()
@@ -772,7 +787,6 @@ async fn handle_http(
 
   // Convert hyper request to reqwest request
   let uri = req.uri().to_string();
-  let method = req.method().clone();
   let headers = req.headers().clone();
 
   let mut request_builder = match method.as_str() {
@@ -826,11 +840,28 @@ async fn handle_http(
         tracker.record_request(&domain, body_bytes.len() as u64, response_size);
       }
 
+      // Never forward upstream proxy auth challenges to the browser.
+      // If upstream proxy auth fails, keep it as a proxy/backend error instead of triggering
+      // a local browser proxy login popup (moz-proxy://127.0.0.1:port).
+      if status.as_u16() == 407 {
+        let mut response = Response::new(Full::new(Bytes::from(
+          "Upstream proxy authentication failed. Please re-check proxy username/password.",
+        )));
+        *response.status_mut() = StatusCode::BAD_GATEWAY;
+        return Ok(response);
+      }
+
       let mut hyper_response = Response::new(Full::new(body));
       *hyper_response.status_mut() = StatusCode::from_u16(status.as_u16()).unwrap();
 
       // Copy response headers
       for (name, value) in headers.iter() {
+        if name.as_str().eq_ignore_ascii_case("proxy-authenticate")
+          || name.as_str().eq_ignore_ascii_case("proxy-authorization")
+          || name.as_str().eq_ignore_ascii_case("proxy-connection")
+        {
+          continue;
+        }
         if let Ok(val) = value.to_str() {
           hyper_response
             .headers_mut()
@@ -849,6 +880,63 @@ async fn handle_http(
   }
 }
 
+fn build_single_word_search_redirect(
+  method: &Method,
+  uri: &hyper::Uri,
+  headers: &hyper::HeaderMap,
+) -> Option<String> {
+  if method != Method::GET && method != Method::HEAD {
+    return None;
+  }
+
+  let host = extract_host_for_search_rewrite(uri, headers)?;
+  if host.contains('.') || host.eq_ignore_ascii_case("localhost") {
+    return None;
+  }
+  if host.parse::<std::net::IpAddr>().is_ok() {
+    return None;
+  }
+
+  let path = uri.path();
+  if path != "/" && !path.is_empty() {
+    return None;
+  }
+
+  let encoded: String = url::form_urlencoded::byte_serialize(host.as_bytes()).collect();
+  let redirect = format!("https://www.google.com/search?q={encoded}");
+  log::info!(
+    "Rewriting single-word host request '{}' -> '{}'",
+    host,
+    redirect
+  );
+  Some(redirect)
+}
+
+fn extract_host_for_search_rewrite(uri: &hyper::Uri, headers: &hyper::HeaderMap) -> Option<String> {
+  if let Some(host) = uri.host() {
+    return Some(host.to_string());
+  }
+
+  // Some proxy requests may come in absolute-form strings where host() can be empty.
+  let raw = uri.to_string();
+  if let Ok(parsed) = Url::parse(&raw) {
+    if let Some(host) = parsed.host_str() {
+      return Some(host.to_string());
+    }
+  }
+
+  if let Some(host_header) = headers.get("host").and_then(|v| v.to_str().ok()) {
+    let host_only = host_header
+      .split(':')
+      .next()
+      .map(str::trim)
+      .filter(|v| !v.is_empty())?;
+    return Some(host_only.to_string());
+  }
+
+  None
+}
+
 fn build_reqwest_client_with_proxy(
   upstream_url: &str,
 ) -> Result<reqwest::Client, Box<dyn std::error::Error>> {
@@ -859,12 +947,13 @@ fn build_reqwest_client_with_proxy(
   // Parse the upstream URL
   let url = Url::parse(upstream_url)?;
   let scheme = url.scheme();
+  let (proxy_endpoint, username, password) = normalize_proxy_endpoint_and_auth(&url)?;
 
-  let proxy = match scheme {
+  let mut proxy = match scheme {
     "http" | "https" => {
       // For HTTP/HTTPS proxies, reqwest handles them directly
       // Note: HTTPS proxy URLs still use HTTP CONNECT method, reqwest handles TLS automatically
-      Proxy::http(upstream_url)?
+      Proxy::http(&proxy_endpoint)?
     }
     "socks5" => {
       // For SOCKS5, reqwest supports it directly
@@ -880,7 +969,44 @@ fn build_reqwest_client_with_proxy(
     }
   };
 
+  if let Some(user) = username {
+    proxy = proxy.basic_auth(&user, password.as_deref().unwrap_or(""));
+  }
+
   Ok(client_builder.proxy(proxy).build()?)
+}
+
+fn normalize_proxy_endpoint_and_auth(
+  url: &Url,
+) -> Result<(String, Option<String>, Option<String>), Box<dyn std::error::Error>> {
+  let username = if url.username().is_empty() {
+    None
+  } else {
+    Some(
+      urlencoding::decode(url.username())
+        .map_err(|e| format!("Failed to decode proxy username: {e}"))?
+        .to_string(),
+    )
+  };
+
+  let password = match url.password() {
+    Some(raw) => Some(
+      urlencoding::decode(raw)
+        .map_err(|e| format!("Failed to decode proxy password: {e}"))?
+        .to_string(),
+    ),
+    None => None,
+  };
+
+  let mut endpoint = url.clone();
+  endpoint
+    .set_username("")
+    .map_err(|_| "Failed to clear proxy username")?;
+  endpoint
+    .set_password(None)
+    .map_err(|_| "Failed to clear proxy password")?;
+
+  Ok((endpoint.to_string(), username, password))
 }
 
 pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -1062,14 +1188,16 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
         let matcher = bypass_matcher.clone();
 
         tokio::task::spawn(async move {
-          // Read first bytes to detect CONNECT requests
-          // CONNECT requests need special handling for tunneling
-          // Use a larger buffer to ensure we can detect CONNECT even with partial reads
+          // Wait for the stream to become readable before first read.
+          // This avoids transient zero-byte reads on freshly accepted sockets.
+          if stream.readable().await.is_err() {
+            return;
+          }
+
+          // Read first bytes to detect CONNECT requests.
           let mut peek_buffer = [0u8; 16];
           match stream.read(&mut peek_buffer).await {
-            Ok(0) => {
-              log::error!("DEBUG: Connection closed immediately (0 bytes read)");
-            }
+            Ok(0) => {}
             Ok(n) => {
               // Check if this looks like a CONNECT request
               // Be more lenient - check if the first bytes match "CONNECT" (case-insensitive)
@@ -1164,8 +1292,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
                 return;
               }
 
-              // Not CONNECT (or partial read) - reconstruct stream with consumed bytes prepended
-              // This is critical: we MUST prepend any bytes we consumed, even if < 7 bytes
+              // Not CONNECT (or partial read) - reconstruct stream with consumed bytes prepended.
               log::error!(
                 "DEBUG: Non-CONNECT request, first {} bytes: {:?}",
                 n,
@@ -1297,7 +1424,20 @@ async fn handle_connect_from_buffer(
           let response = String::from_utf8_lossy(&buffer[..n]);
 
           if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
-            return Err(format!("Upstream proxy CONNECT failed: {}", response).into());
+            let status_line = response.lines().next().unwrap_or_default();
+            let body = if status_line.contains(" 407 ") {
+              "Upstream proxy authentication failed. Please re-check proxy username/password."
+            } else {
+              "Upstream proxy CONNECT failed."
+            };
+            let fail_resp = format!(
+              "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{}",
+              body.len(),
+              body
+            );
+            let _ = client_stream.write_all(fail_resp.as_bytes()).await;
+            let _ = client_stream.flush().await;
+            return Ok(());
           }
 
           proxy_stream
@@ -1412,4 +1552,31 @@ async fn handle_connect_from_buffer(
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::normalize_proxy_endpoint_and_auth;
+  use url::Url;
+
+  #[test]
+  fn normalize_proxy_endpoint_keeps_host_and_port_but_strips_credentials() {
+    let url = Url::parse("http://user:pass@example.com:8080").expect("valid url");
+    let (endpoint, username, password) =
+      normalize_proxy_endpoint_and_auth(&url).expect("normalize");
+
+    assert_eq!(endpoint, "http://example.com:8080/");
+    assert_eq!(username.as_deref(), Some("user"));
+    assert_eq!(password.as_deref(), Some("pass"));
+  }
+
+  #[test]
+  fn normalize_proxy_endpoint_decodes_percent_encoded_credentials() {
+    let url =
+      Url::parse("http://us%40er:pa%3Ass@example.com:3128").expect("valid encoded credentials");
+    let (_endpoint, username, password) = normalize_proxy_endpoint_and_auth(&url).expect("decode");
+
+    assert_eq!(username.as_deref(), Some("us@er"));
+    assert_eq!(password.as_deref(), Some("pa:ss"));
+  }
 }

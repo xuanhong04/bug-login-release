@@ -4,7 +4,7 @@
   "version": "0.16.0",
   "identifier": "com.buglogin.desktop",
   "build": {
-    "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
+    "beforeDevCommand": "node scripts/tauri-before-dev.mjs",
     "devUrl": "http://localhost:12341",
     "beforeBuildCommand": "pnpm copy-proxy-binary && pnpm build",
     "frontendDist": "../dist"

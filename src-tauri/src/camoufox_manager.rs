@@ -99,6 +99,10 @@ impl CamoufoxManager {
     profile: &crate::profile::BrowserProfile,
     config: &CamoufoxConfig,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let mut config = config.clone();
+    Self::sanitize_screen_constraints(&mut config);
+    Self::normalize_operating_system(&mut config);
+
     // Get executable path
     let executable_path = if let Some(path) = &config.executable_path {
       let p = PathBuf::from(path);
@@ -116,18 +120,120 @@ impl CamoufoxManager {
         .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
     };
 
-    // Build the config using CamoufoxConfigBuilder
+    if let Ok(fingerprint) = Self::build_fingerprint_json(&config, &executable_path).await {
+      return Ok(fingerprint);
+    }
+
+    // Fallback path for strict constraints that produce no valid sample.
+    let mut fallback_no_os = config.clone();
+    fallback_no_os.os = None;
+    if let Ok(fingerprint) = Self::build_fingerprint_json(&fallback_no_os, &executable_path).await {
+      log::warn!(
+        "Camoufox fingerprint generation only succeeded after dropping OS constraint for profile '{}'",
+        profile.name
+      );
+      return Ok(fingerprint);
+    }
+
+    let mut fallback_no_screen = config.clone();
+    Self::clear_screen_constraints(&mut fallback_no_screen);
+    if let Ok(fingerprint) =
+      Self::build_fingerprint_json(&fallback_no_screen, &executable_path).await
+    {
+      log::warn!(
+        "Camoufox fingerprint generation only succeeded after dropping screen constraints for profile '{}'",
+        profile.name
+      );
+      return Ok(fingerprint);
+    }
+
+    let mut fallback_relaxed = fallback_no_screen.clone();
+    fallback_relaxed.os = None;
+    Self::build_fingerprint_json(&fallback_relaxed, &executable_path)
+      .await
+      .map_err(Into::into)
+  }
+
+  fn sanitize_screen_constraints(config: &mut CamoufoxConfig) {
+    const ABS_MIN_W: u32 = 800;
+    const ABS_MIN_H: u32 = 600;
+    const ABS_MAX_W: u32 = 7680;
+    const ABS_MAX_H: u32 = 4320;
+
+    if config.screen_min_width.is_none()
+      && config.screen_max_width.is_none()
+      && config.screen_min_height.is_none()
+      && config.screen_max_height.is_none()
+    {
+      return;
+    }
+
+    let mut min_w = config.screen_min_width.unwrap_or(ABS_MIN_W);
+    let mut min_h = config.screen_min_height.unwrap_or(ABS_MIN_H);
+    let mut max_w = config.screen_max_width.unwrap_or(ABS_MAX_W);
+    let mut max_h = config.screen_max_height.unwrap_or(ABS_MAX_H);
+
+    min_w = min_w.clamp(ABS_MIN_W, ABS_MAX_W);
+    min_h = min_h.clamp(ABS_MIN_H, ABS_MAX_H);
+    max_w = max_w.clamp(ABS_MIN_W, ABS_MAX_W);
+    max_h = max_h.clamp(ABS_MIN_H, ABS_MAX_H);
+
+    if min_w > max_w {
+      std::mem::swap(&mut min_w, &mut max_w);
+    }
+    if min_h > max_h {
+      std::mem::swap(&mut min_h, &mut max_h);
+    }
+
+    config.screen_min_width = Some(min_w);
+    config.screen_min_height = Some(min_h);
+    config.screen_max_width = Some(max_w);
+    config.screen_max_height = Some(max_h);
+  }
+
+  fn clear_screen_constraints(config: &mut CamoufoxConfig) {
+    config.screen_min_width = None;
+    config.screen_min_height = None;
+    config.screen_max_width = None;
+    config.screen_max_height = None;
+  }
+
+  fn normalize_operating_system(config: &mut CamoufoxConfig) {
+    let Some(os) = config.os.take() else {
+      return;
+    };
+
+    let normalized = match os.trim().to_ascii_lowercase().as_str() {
+      "windows" | "win" | "win32" | "win64" => Some("windows".to_string()),
+      "macos" | "mac" | "macosx" | "darwin" | "osx" | "mac os" | "mac os x" => {
+        Some("macos".to_string())
+      }
+      "linux" | "lin" | "ubuntu" | "debian" | "arch" => Some("linux".to_string()),
+      unknown => {
+        log::warn!(
+          "Unknown Camoufox OS constraint '{}', dropping OS constraint for fingerprint generation",
+          unknown
+        );
+        None
+      }
+    };
+
+    config.os = normalized;
+  }
+
+  async fn build_fingerprint_json(
+    config: &CamoufoxConfig,
+    executable_path: &std::path::Path,
+  ) -> Result<String, String> {
     let mut builder = CamoufoxConfigBuilder::new()
       .block_images(config.block_images.unwrap_or(false))
       .block_webrtc(config.block_webrtc.unwrap_or(false))
       .block_webgl(config.block_webgl.unwrap_or(false));
 
-    // Set operating system
     if let Some(os) = &config.os {
       builder = builder.operating_system(os);
     }
 
-    // Build screen constraints if provided
     if config.screen_min_width.is_some()
       || config.screen_max_width.is_some()
       || config.screen_min_height.is_some()
@@ -142,46 +248,56 @@ impl CamoufoxManager {
       builder = builder.screen_constraints(screen_constraints);
     }
 
-    // Parse proxy if provided
     if let Some(proxy_str) = &config.proxy {
       let proxy_config = crate::camoufox::ProxyConfig::from_url(proxy_str)
         .map_err(|e| format!("Failed to parse proxy URL: {e}"))?;
       builder = builder.proxy(proxy_config);
     }
 
-    // Set Firefox version from executable
-    if let Some(version) = crate::camoufox::config::get_firefox_version(&executable_path) {
+    if let Some(version) = crate::camoufox::config::get_firefox_version(executable_path) {
       builder = builder.ff_version(version);
     }
 
-    // Handle geoip option
     if let Some(geoip_value) = &config.geoip {
       match geoip_value {
         serde_json::Value::Bool(true) => {
-          // Auto-detect IP (through proxy if set)
           builder = builder.geoip(GeoIPOption::Auto);
         }
         serde_json::Value::String(ip) => {
-          // Use specific IP
           builder = builder.geoip(GeoIPOption::IP(ip.clone()));
         }
-        _ => {
-          // geoip: false or other values - don't apply geolocation
-        }
+        _ => {}
       }
     }
 
-    // Build the config (async to handle geoip)
     let launch_config = builder
       .build_async()
       .await
       .map_err(|e| format!("Failed to build Camoufox config: {e}"))?;
 
-    // Return the fingerprint config as JSON
-    let config_json = serde_json::to_string(&launch_config.fingerprint_config)
-      .map_err(|e| format!("Failed to serialize config: {e}"))?;
+    let generated_width = launch_config
+      .fingerprint_config
+      .get("screen.width")
+      .and_then(|v| v.as_u64())
+      .unwrap_or_default();
+    let generated_height = launch_config
+      .fingerprint_config
+      .get("screen.height")
+      .and_then(|v| v.as_u64())
+      .unwrap_or_default();
+    log::info!(
+      "Generated Camoufox fingerprint screen {}x{} with constraints min({:?}x{:?}) max({:?}x{:?}) os={:?}",
+      generated_width,
+      generated_height,
+      config.screen_min_width,
+      config.screen_min_height,
+      config.screen_max_width,
+      config.screen_max_height,
+      config.os
+    );
 
-    Ok(config_json)
+    serde_json::to_string(&launch_config.fingerprint_config)
+      .map_err(|e| format!("Failed to serialize config: {e}"))
   }
 
   /// Launch Camoufox browser by directly spawning the process
@@ -218,9 +334,21 @@ impl CamoufoxManager {
     };
 
     // Parse the fingerprint config JSON
-    let fingerprint_config: HashMap<String, serde_json::Value> =
+    let mut fingerprint_config: HashMap<String, serde_json::Value> =
       serde_json::from_str(&custom_config)
         .map_err(|e| format!("Failed to parse fingerprint config: {e}"))?;
+
+    // Usability-first: let native window manager control runtime window metrics.
+    // Old profiles may have stale injected values causing clipped titlebar / bad resizing.
+    for key in [
+      "window.innerWidth",
+      "window.innerHeight",
+      "window.outerWidth",
+      "window.outerHeight",
+      "window.history.length",
+    ] {
+      fingerprint_config.remove(key);
+    }
 
     // Convert to environment variables using CAMOU_CONFIG chunking
     let env_vars = crate::camoufox::env_vars::config_to_env_vars(&fingerprint_config)
@@ -419,6 +547,12 @@ impl CamoufoxManager {
                   profilePath: instance.profile_path.clone(),
                   url: instance.url.clone(),
                 }));
+              } else {
+                log::debug!(
+                  "Camoufox instance {} matched profile path but PID {} was not considered alive",
+                  id,
+                  process_id
+                );
               }
             }
           }
@@ -465,11 +599,16 @@ impl CamoufoxManager {
   ) -> Option<(u32, String)> {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
+    fn normalize_path_like(value: &str) -> String {
+      value.replace('\\', "/").to_lowercase()
+    }
+
     let system = System::new_with_specifics(
       RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
     );
 
     let target_path_str = target_path.to_string_lossy();
+    let target_path_norm = normalize_path_like(&target_path_str);
 
     for (pid, process) in system.processes() {
       let cmd = process.cmd();
@@ -497,14 +636,15 @@ impl CamoufoxManager {
                 .canonicalize()
                 .unwrap_or_else(|_| std::path::Path::new(next_arg).to_path_buf());
 
-              if cmd_path == target_path {
+              let cmd_path_norm = normalize_path_like(&cmd_path.to_string_lossy());
+              if cmd_path_norm == target_path_norm {
                 return Some((pid.as_u32(), next_arg.to_string()));
               }
             }
           }
 
           // Also check if the argument contains the profile path directly
-          if arg_str.contains(&*target_path_str) {
+          if normalize_path_like(arg_str).contains(&target_path_norm) {
             return Some((pid.as_u32(), target_path_str.to_string()));
           }
         }
@@ -561,14 +701,21 @@ impl CamoufoxManager {
 
     let system = System::new_all();
     if let Some(process) = system.process(Pid::from(process_id as usize)) {
-      // Check if this is actually a Camoufox process by looking at the command line
+      // Check if this is actually a Camoufox/Firefox process by looking at
+      // both command line and executable name. Command-line-only matching can
+      // be flaky on Windows and causes false negatives -> unintended relaunch.
       let cmd = process.cmd();
-      let is_camoufox = cmd.iter().any(|arg| {
+      let cmd_match = cmd.iter().any(|arg| {
         let arg_str = arg.to_str().unwrap_or("");
-        arg_str.contains("camoufox-worker") || arg_str.contains("camoufox")
+        let arg_lower = arg_str.to_lowercase();
+        arg_lower.contains("camoufox")
+          || arg_lower.contains("camoufox-worker")
+          || arg_lower.contains("firefox")
       });
+      let exe_lower = process.name().to_string_lossy().to_lowercase();
+      let exe_match = exe_lower.contains("camoufox") || exe_lower.contains("firefox");
 
-      if is_camoufox {
+      if cmd_match || exe_match {
         // Found running Camoufox process
         return true;
       }
@@ -598,7 +745,17 @@ impl CamoufoxManager {
 
     // Check if there's already a running instance for this profile
     if let Ok(Some(existing)) = self.find_camoufox_by_profile(&profile_path_str).await {
-      // If there's an existing instance, stop it first to avoid conflicts
+      // Resume path: keep existing process/session intact when no explicit URL is requested.
+      if url.is_none() {
+        log::info!(
+          "Reusing existing Camoufox instance for profile '{}' (ID: {})",
+          profile.name,
+          profile.id
+        );
+        return Ok(existing);
+      }
+
+      // URL launch path: stop existing instance first to avoid profile lock conflicts.
       let _ = self.stop_camoufox(&app_handle, &existing.id).await;
     }
 
@@ -614,7 +771,8 @@ impl CamoufoxManager {
         "user_pref(\"browser.sessionstore.resume_from_crash\", false);\n",
         "user_pref(\"browser.sessionstore.max_tabs_undo\", 0);\n",
         "user_pref(\"browser.sessionstore.max_windows_undo\", 0);\n",
-        "user_pref(\"places.history.enabled\", false);\n",
+        // Keep in-session navigation history working (back/forward).
+        "user_pref(\"places.history.enabled\", true);\n",
         "user_pref(\"browser.formfill.enable\", false);\n",
         "user_pref(\"signon.rememberSignons\", false);\n",
         "user_pref(\"browser.bookmarks.max_backups\", 0);\n",
@@ -622,14 +780,24 @@ impl CamoufoxManager {
         "user_pref(\"toolkit.crashreporter.enabled\", false);\n",
         "user_pref(\"browser.pagethumbnails.capturing_disabled\", true);\n",
         "user_pref(\"browser.download.manager.addToRecentDocs\", false);\n",
+        "user_pref(\"keyword.enabled\", true);\n",
+        "user_pref(\"browser.fixup.alternate.enabled\", false);\n",
+        "user_pref(\"browser.fixup.dns_first_for_single_words\", false);\n",
+        "user_pref(\"browser.urlbar.dnsResolveSingleWordsAfterSearch\", 0);\n",
+        "user_pref(\"browser.search.defaultenginename\", \"Google\");\n",
+        "user_pref(\"browser.search.defaultenginename.US\", \"Google\");\n",
       );
       if let Err(e) = std::fs::write(&user_js_path, prefs) {
         log::warn!("Failed to write ephemeral user.js: {e}");
       }
     }
 
-    // Write search.json.mozlz4 with default search engines (DuckDuckGo + Google)
-    write_default_search_config(&profile_path);
+    // Ensure keyword search prefs are present for both persistent and ephemeral profiles.
+    ensure_keyword_search_preferences(&profile_path, profile.ephemeral);
+
+    // Remove profile-level search override so Camoufox/Firefox can rebuild
+    // built-in search engines reliably (prevents empty Search Engine UI list).
+    clear_profile_search_override(&profile_path);
 
     self
       .launch_camoufox(
@@ -644,74 +812,104 @@ impl CamoufoxManager {
   }
 }
 
-fn write_default_search_config(profile_path: &std::path::Path) {
-  let search_file = profile_path.join("search.json.mozlz4");
-  if search_file.exists() {
-    return;
+fn ensure_keyword_search_preferences(profile_path: &std::path::Path, ephemeral: bool) {
+  let mut required_prefs = vec![
+    "user_pref(\"keyword.enabled\", true);",
+    "user_pref(\"places.history.enabled\", true);",
+    "user_pref(\"browser.fixup.alternate.enabled\", false);",
+    "user_pref(\"browser.fixup.dns_first_for_single_words\", false);",
+    "user_pref(\"browser.urlbar.dnsResolveSingleWordsAfterSearch\", 0);",
+    "user_pref(\"browser.search.defaultenginename\", \"Google\");",
+    "user_pref(\"browser.search.defaultenginename.US\", \"Google\");",
+  ];
+
+  if !ephemeral {
+    required_prefs.push("user_pref(\"browser.startup.page\", 3);");
+    required_prefs.push("user_pref(\"browser.sessionstore.resume_from_crash\", true);");
   }
 
-  let json = serde_json::json!({
-    "version": 6,
-    "engines": [
-      {
-        "_name": "DuckDuckGo",
-        "_isAppProvided": false,
-        "_metaData": { "order": 1 },
-        "_urls": [
-          {
-            "template": "https://duckduckgo.com/?q={searchTerms}",
-            "type": "text/html",
-            "params": []
-          },
-          {
-            "template": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
-            "type": "application/x-suggestions+json",
-            "params": []
-          }
-        ],
-        "_iconURL": "https://duckduckgo.com/favicon.ico"
-      },
-      {
-        "_name": "Google",
-        "_isAppProvided": false,
-        "_metaData": { "order": 2 },
-        "_urls": [
-          {
-            "template": "https://www.google.com/search?q={searchTerms}",
-            "type": "text/html",
-            "params": []
-          },
-          {
-            "template": "https://www.google.com/complete/search?client=firefox&q={searchTerms}",
-            "type": "application/x-suggestions+json",
-            "params": []
-          }
-        ],
-        "_iconURL": "https://www.google.com/favicon.ico"
-      }
-    ],
-    "metaData": {
-      "useSavedOrder": false,
-      "defaultEngineId": "DuckDuckGo"
-    }
-  });
+  upsert_preference_lines(&profile_path.join("user.js"), &required_prefs);
+  upsert_preference_lines(&profile_path.join("prefs.js"), &required_prefs);
+  scrub_legacy_disabled_history_pref(&profile_path.join("user.js"));
+  scrub_legacy_disabled_history_pref(&profile_path.join("prefs.js"));
+  scrub_legacy_search_policy_runonce(&profile_path.join("prefs.js"));
+}
 
-  let json_bytes = match serde_json::to_vec(&json) {
-    Ok(bytes) => bytes,
-    Err(e) => {
-      log::warn!("Failed to serialize search config: {e}");
-      return;
-    }
+fn upsert_preference_lines(path: &std::path::Path, prefs: &[&str]) {
+  let mut content = if path.exists() {
+    std::fs::read_to_string(path).unwrap_or_default()
+  } else {
+    String::new()
   };
 
-  let magic = b"mozLz40\0";
-  let compressed = lz4_flex::block::compress_prepend_size(&json_bytes);
-  let mut output = Vec::with_capacity(magic.len() + compressed.len());
-  output.extend_from_slice(magic);
-  output.extend_from_slice(&compressed);
+  for pref in prefs {
+    if !content.contains(pref) {
+      if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+      }
+      content.push_str(pref);
+      content.push('\n');
+    }
+  }
 
-  if let Err(e) = std::fs::write(&search_file, &output) {
-    log::warn!("Failed to write search.json.mozlz4: {e}");
+  if let Err(e) = std::fs::write(path, content) {
+    log::warn!(
+      "Failed to persist keyword search prefs to {}: {e}",
+      path.display()
+    );
+  }
+}
+
+fn scrub_legacy_search_policy_runonce(path: &std::path::Path) {
+  let Ok(content) = std::fs::read_to_string(path) else {
+    return;
+  };
+
+  let filtered: Vec<&str> = content
+    .lines()
+    .filter(|line| !line.contains("browser.policies.runOncePerModification.extensionsUninstall"))
+    .collect();
+
+  let next = filtered.join("\n");
+  if next != content {
+    if let Err(e) = std::fs::write(path, next) {
+      log::warn!(
+        "Failed to scrub legacy runOnce search policy in {}: {e}",
+        path.display()
+      );
+    }
+  }
+}
+
+fn scrub_legacy_disabled_history_pref(path: &std::path::Path) {
+  let Ok(content) = std::fs::read_to_string(path) else {
+    return;
+  };
+
+  let filtered: Vec<&str> = content
+    .lines()
+    .filter(|line| !line.contains("user_pref(\"places.history.enabled\", false);"))
+    .collect();
+
+  let next = filtered.join("\n");
+  if next != content {
+    if let Err(e) = std::fs::write(path, next) {
+      log::warn!(
+        "Failed to scrub legacy disabled history pref in {}: {e}",
+        path.display()
+      );
+    }
+  }
+}
+
+fn clear_profile_search_override(profile_path: &std::path::Path) {
+  let search_file = profile_path.join("search.json.mozlz4");
+  if search_file.exists() {
+    if let Err(e) = std::fs::remove_file(&search_file) {
+      log::warn!("Failed to remove search.json.mozlz4 override: {e}");
+    } else {
+      log::info!("Removed profile search.json.mozlz4 override");
+    }
   }
 }
 
@@ -729,6 +927,73 @@ mod tests {
     assert_eq!(default_config.fingerprint, None);
     assert_eq!(default_config.randomize_fingerprint_on_launch, None);
     assert_eq!(default_config.os, None);
+  }
+
+  #[test]
+  fn test_sanitize_screen_constraints_applies_defaults() {
+    let mut config = CamoufoxConfig::default();
+    CamoufoxManager::sanitize_screen_constraints(&mut config);
+
+    assert_eq!(config.screen_min_width, None);
+    assert_eq!(config.screen_min_height, None);
+    assert_eq!(config.screen_max_width, None);
+    assert_eq!(config.screen_max_height, None);
+  }
+
+  #[test]
+  fn test_sanitize_screen_constraints_swaps_invalid_ranges() {
+    let mut config = CamoufoxConfig {
+      screen_min_width: Some(3000),
+      screen_max_width: Some(1200),
+      screen_min_height: Some(2000),
+      screen_max_height: Some(900),
+      ..CamoufoxConfig::default()
+    };
+
+    CamoufoxManager::sanitize_screen_constraints(&mut config);
+
+    assert_eq!(config.screen_min_width, Some(1200));
+    assert_eq!(config.screen_max_width, Some(3000));
+    assert_eq!(config.screen_min_height, Some(900));
+    assert_eq!(config.screen_max_height, Some(2000));
+  }
+
+  #[test]
+  fn test_normalize_operating_system_known_values() {
+    let mut config = CamoufoxConfig {
+      os: Some("Win64".to_string()),
+      ..CamoufoxConfig::default()
+    };
+    CamoufoxManager::normalize_operating_system(&mut config);
+    assert_eq!(config.os, Some("windows".to_string()));
+  }
+
+  #[test]
+  fn test_normalize_operating_system_unknown_values() {
+    let mut config = CamoufoxConfig {
+      os: Some("solaris".to_string()),
+      ..CamoufoxConfig::default()
+    };
+    CamoufoxManager::normalize_operating_system(&mut config);
+    assert_eq!(config.os, None);
+  }
+
+  #[test]
+  fn test_clear_screen_constraints() {
+    let mut config = CamoufoxConfig {
+      screen_min_width: Some(1000),
+      screen_max_width: Some(2000),
+      screen_min_height: Some(700),
+      screen_max_height: Some(1500),
+      ..CamoufoxConfig::default()
+    };
+
+    CamoufoxManager::clear_screen_constraints(&mut config);
+
+    assert_eq!(config.screen_min_width, None);
+    assert_eq!(config.screen_max_width, None);
+    assert_eq!(config.screen_min_height, None);
+    assert_eq!(config.screen_max_height, None);
   }
 }
 

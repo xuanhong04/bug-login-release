@@ -14,9 +14,41 @@ function detectPlatform(): Platform {
 
 export function WindowDragArea() {
   const [platform, setPlatform] = useState<Platform | null>(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
-    setPlatform(detectPlatform());
+    const detectedPlatform = detectPlatform();
+    setPlatform(detectedPlatform);
+
+    document.body.dataset.windowPlatform = detectedPlatform;
+    if (detectedPlatform === "windows") {
+      void getCurrentWindow()
+        .isMaximized()
+        .then(setIsMaximized)
+        .catch(() => {
+          setIsMaximized(false);
+        });
+    }
+
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .onResized(async () => {
+        try {
+          setIsMaximized(await getCurrentWindow().isMaximized());
+        } catch {
+          setIsMaximized(false);
+        }
+      })
+      .then((cleanup) => {
+        unlisten = cleanup;
+      })
+      .catch(() => {
+        unlisten = undefined;
+      });
+
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -128,9 +160,16 @@ export function WindowDragArea() {
             stroke="currentColor"
             strokeWidth="1.2"
             role="img"
-            aria-label="Maximize"
+            aria-label={isMaximized ? "Restore" : "Maximize"}
           >
-            <rect x="1.5" y="1.5" width="7" height="7" />
+            {isMaximized ? (
+              <>
+                <path d="M3.2 1.8h5v5" />
+                <path d="M1.8 3.2h5v5h-5z" />
+              </>
+            ) : (
+              <rect x="1.5" y="1.5" width="7" height="7" />
+            )}
           </svg>
         </button>
         <button

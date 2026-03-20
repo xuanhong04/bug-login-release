@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -253,81 +254,164 @@ export function ImportProfileDialog({
           <DialogTitle>Import Browser Profile</DialogTitle>
         </DialogHeader>
 
-        <div className="overflow-y-auto flex-1 space-y-6 min-h-0">
-          {/* Mode Selection */}
-          <div className="flex gap-2">
-            <RippleButton
-              variant={importMode === "auto-detect" ? "default" : "outline"}
-              onClick={() => {
-                setImportMode("auto-detect");
-              }}
-              className="flex-1"
-              disabled={isLoading}
-            >
-              Auto-Detect
-            </RippleButton>
-            <RippleButton
-              variant={importMode === "manual" ? "default" : "outline"}
-              onClick={() => {
-                setImportMode("manual");
-              }}
-              className="flex-1"
-              disabled={isLoading}
-            >
-              Manual Import
-            </RippleButton>
-          </div>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="space-y-6">
+            {/* Mode Selection */}
+            <div className="flex gap-2">
+              <RippleButton
+                variant={importMode === "auto-detect" ? "default" : "outline"}
+                onClick={() => {
+                  setImportMode("auto-detect");
+                }}
+                className="flex-1"
+                disabled={isLoading}
+              >
+                Auto-Detect
+              </RippleButton>
+              <RippleButton
+                variant={importMode === "manual" ? "default" : "outline"}
+                onClick={() => {
+                  setImportMode("manual");
+                }}
+                className="flex-1"
+                disabled={isLoading}
+              >
+                Manual Import
+              </RippleButton>
+            </div>
 
-          {/* Auto-Detect Mode */}
-          {importMode === "auto-detect" && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Detected Browser Profiles</h3>
+            {/* Auto-Detect Mode */}
+            {importMode === "auto-detect" && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">
+                  Detected Browser Profiles
+                </h3>
 
-              {isLoading ? (
-                <div className="py-8 text-center">
-                  <p className="text-muted-foreground">
-                    Scanning for browser profiles...
-                  </p>
-                </div>
-              ) : detectedProfiles.length === 0 ? (
-                <div className="py-8 text-center">
-                  <p className="text-muted-foreground">
-                    No browser profiles found on your system.
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Try the manual import option if you have profiles in custom
-                    locations.
-                  </p>
-                </div>
-              ) : (
+                {isLoading ? (
+                  <div className="py-8 text-center">
+                    <p className="text-muted-foreground">
+                      Scanning for browser profiles...
+                    </p>
+                  </div>
+                ) : detectedProfiles.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="text-muted-foreground">
+                      No browser profiles found on your system.
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Try the manual import option if you have profiles in
+                      custom locations.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="detected-profile-select" className="mb-2">
+                        Select Profile:
+                      </Label>
+                      <Select
+                        value={selectedDetectedProfile ?? undefined}
+                        onValueChange={(value) => {
+                          setSelectedDetectedProfile(value);
+                        }}
+                      >
+                        <SelectTrigger id="detected-profile-select">
+                          <SelectValue placeholder="Choose a detected profile" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {detectedProfiles.map((profile) => {
+                            const IconComponent = getBrowserIcon(
+                              profile.browser,
+                            );
+                            return (
+                              <SelectItem
+                                key={profile.path}
+                                value={profile.path}
+                              >
+                                <div className="flex gap-2 items-center">
+                                  {IconComponent && (
+                                    <IconComponent className="w-4 h-4" />
+                                  )}
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">
+                                      {profile.name}
+                                    </span>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedProfile && (
+                      <div className="p-3 rounded-lg bg-muted">
+                        <p className="text-sm">
+                          <span className="font-medium">Path:</span>{" "}
+                          {selectedProfile.path}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Browser:</span>{" "}
+                          {getBrowserDisplayName(selectedProfile.browser)}
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="auto-profile-name" className="mb-2">
+                        New Profile Name:
+                      </Label>
+                      <Input
+                        id="auto-profile-name"
+                        value={autoDetectProfileName}
+                        onChange={(e) => {
+                          setAutoDetectProfileName(e.target.value);
+                        }}
+                        placeholder="Enter a name for the imported profile"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Manual Import Mode */}
+            {importMode === "manual" && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium">Manual Profile Import</h3>
+
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="detected-profile-select" className="mb-2">
-                      Select Profile:
+                    <Label htmlFor="manual-browser-select" className="mb-2">
+                      Browser Type:
                     </Label>
                     <Select
-                      value={selectedDetectedProfile ?? undefined}
+                      value={manualBrowserType ?? undefined}
                       onValueChange={(value) => {
-                        setSelectedDetectedProfile(value);
+                        setManualBrowserType(value);
                       }}
+                      disabled={isLoadingSupport}
                     >
-                      <SelectTrigger id="detected-profile-select">
-                        <SelectValue placeholder="Choose a detected profile" />
+                      <SelectTrigger id="manual-browser-select">
+                        <SelectValue
+                          placeholder={
+                            isLoadingSupport
+                              ? "Loading browsers..."
+                              : "Select browser type"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        {detectedProfiles.map((profile) => {
-                          const IconComponent = getBrowserIcon(profile.browser);
+                        {importableBrowsers.map((browser) => {
+                          const IconComponent = getBrowserIcon(browser);
                           return (
-                            <SelectItem key={profile.path} value={profile.path}>
+                            <SelectItem key={browser} value={browser}>
                               <div className="flex gap-2 items-center">
                                 {IconComponent && (
                                   <IconComponent className="w-4 h-4" />
                                 )}
-                                <div className="flex flex-col">
-                                  <span className="font-medium">
-                                    {profile.name}
-                                  </span>
-                                </div>
+                                <span>{getBrowserDisplayName(browser)}</span>
                               </div>
                             </SelectItem>
                           );
@@ -336,132 +420,58 @@ export function ImportProfileDialog({
                     </Select>
                   </div>
 
-                  {selectedProfile && (
-                    <div className="p-3 rounded-lg bg-muted">
-                      <p className="text-sm">
-                        <span className="font-medium">Path:</span>{" "}
-                        {selectedProfile.path}
-                      </p>
-                      <p className="text-sm">
-                        <span className="font-medium">Browser:</span>{" "}
-                        {getBrowserDisplayName(selectedProfile.browser)}
-                      </p>
+                  <div>
+                    <Label htmlFor="manual-profile-path" className="mb-2">
+                      Profile Folder Path:
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="manual-profile-path"
+                        value={manualProfilePath}
+                        onChange={(e) => {
+                          setManualProfilePath(e.target.value);
+                        }}
+                        placeholder="Enter the full path to the profile folder"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => void handleBrowseFolder()}
+                        title="Browse for folder"
+                      >
+                        <FaFolder className="w-4 h-4" />
+                      </Button>
                     </div>
-                  )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Example paths:
+                      <br />
+                      macOS: ~/Library/Application
+                      Support/Firefox/Profiles/xxx.default
+                      <br />
+                      Windows: %APPDATA%\Mozilla\Firefox\Profiles\xxx.default
+                      <br />
+                      Linux: ~/.mozilla/firefox/xxx.default
+                    </p>
+                  </div>
 
                   <div>
-                    <Label htmlFor="auto-profile-name" className="mb-2">
+                    <Label htmlFor="manual-profile-name" className="mb-2">
                       New Profile Name:
                     </Label>
                     <Input
-                      id="auto-profile-name"
-                      value={autoDetectProfileName}
+                      id="manual-profile-name"
+                      value={manualProfileName}
                       onChange={(e) => {
-                        setAutoDetectProfileName(e.target.value);
+                        setManualProfileName(e.target.value);
                       }}
                       placeholder="Enter a name for the imported profile"
                     />
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Manual Import Mode */}
-          {importMode === "manual" && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Manual Profile Import</h3>
-
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="manual-browser-select" className="mb-2">
-                    Browser Type:
-                  </Label>
-                  <Select
-                    value={manualBrowserType ?? undefined}
-                    onValueChange={(value) => {
-                      setManualBrowserType(value);
-                    }}
-                    disabled={isLoadingSupport}
-                  >
-                    <SelectTrigger id="manual-browser-select">
-                      <SelectValue
-                        placeholder={
-                          isLoadingSupport
-                            ? "Loading browsers..."
-                            : "Select browser type"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {importableBrowsers.map((browser) => {
-                        const IconComponent = getBrowserIcon(browser);
-                        return (
-                          <SelectItem key={browser} value={browser}>
-                            <div className="flex gap-2 items-center">
-                              {IconComponent && (
-                                <IconComponent className="w-4 h-4" />
-                              )}
-                              <span>{getBrowserDisplayName(browser)}</span>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="manual-profile-path" className="mb-2">
-                    Profile Folder Path:
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="manual-profile-path"
-                      value={manualProfilePath}
-                      onChange={(e) => {
-                        setManualProfilePath(e.target.value);
-                      }}
-                      placeholder="Enter the full path to the profile folder"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => void handleBrowseFolder()}
-                      title="Browse for folder"
-                    >
-                      <FaFolder className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Example paths:
-                    <br />
-                    macOS: ~/Library/Application
-                    Support/Firefox/Profiles/xxx.default
-                    <br />
-                    Windows: %APPDATA%\Mozilla\Firefox\Profiles\xxx.default
-                    <br />
-                    Linux: ~/.mozilla/firefox/xxx.default
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="manual-profile-name" className="mb-2">
-                    New Profile Name:
-                  </Label>
-                  <Input
-                    id="manual-profile-name"
-                    value={manualProfileName}
-                    onChange={(e) => {
-                      setManualProfileName(e.target.value);
-                    }}
-                    placeholder="Enter a name for the imported profile"
-                  />
-                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        </ScrollArea>
 
         <DialogFooter className="flex-shrink-0">
           <RippleButton variant="outline" onClick={handleClose}>

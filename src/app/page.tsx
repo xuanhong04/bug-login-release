@@ -4,9 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { AppSidebar } from "@/components/app-sidebar";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
-import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
@@ -16,7 +17,6 @@ import { ExtensionManagementDialog } from "@/components/extension-management-dia
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
 import { GroupBadges } from "@/components/group-badges";
 import { GroupManagementDialog } from "@/components/group-management-dialog";
-import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
 import { LaunchOnLoginDialog } from "@/components/launch-on-login-dialog";
@@ -24,6 +24,10 @@ import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
+import {
+  ProfilesWorkspaceHeaderActions,
+  ProfilesWorkspaceToolbar,
+} from "@/components/profiles-workspace-chrome";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
@@ -31,9 +35,9 @@ import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { WindowResizeWarningDialog } from "@/components/window-resize-warning-dialog";
+import { WorkspacePageShell } from "@/components/workspace-page-shell";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
-import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -43,6 +47,12 @@ import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
+import { extractRootError } from "@/lib/error-utils";
+import {
+  canPerformTeamAction,
+  normalizeTeamRole,
+  type TeamAction,
+} from "@/lib/team-permissions";
 import {
   dismissToast,
   showErrorToast,
@@ -51,6 +61,7 @@ import {
   showToast,
 } from "@/lib/toast-utils";
 import type {
+  AppSection,
   BrowserProfile,
   CamoufoxConfig,
   SyncSettings,
@@ -71,7 +82,19 @@ interface PendingUrl {
   url: string;
 }
 
+interface SavedProfileView {
+  id: string;
+  name: string;
+  searchQuery: string;
+  groupId: string;
+  pinnedOnly?: boolean;
+}
+
+type ProfileViewMode = "active" | "archived";
+
 export default function Home() {
+  const { t } = useTranslation();
+
   // Mount global version update listener/toasts
   useVersionUpdater();
 
@@ -97,24 +120,15 @@ export default function Home() {
 
   const { vpnConfigs } = useVpnEvents();
 
-  // Wayfern terms and commercial trial hooks
+  // Wayfern terms hooks
   const {
     termsAccepted,
     isLoading: termsLoading,
     checkTerms,
   } = useWayfernTerms();
-  const {
-    trialStatus,
-    hasAcknowledged: trialAcknowledged,
-    checkTrialStatus,
-  } = useCommercialTrial();
-
-  // Cloud auth for cross-OS unlock
   const { user: cloudUser } = useCloudAuth();
-  const crossOsUnlocked =
-    cloudUser?.plan !== "free" &&
-    (cloudUser?.subscriptionStatus === "active" ||
-      cloudUser?.planPeriod === "lifetime");
+  const crossOsUnlocked = true;
+  const teamRole = normalizeTeamRole(cloudUser?.teamRole);
 
   const [selfHostedSyncConfigured, setSelfHostedSyncConfigured] =
     useState(false);
@@ -134,11 +148,9 @@ export default function Home() {
   const syncUnlocked = crossOsUnlocked || selfHostedSyncConfigured;
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
-  const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<AppSection>("profiles");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
-  const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
-    useState(false);
   const [camoufoxConfigDialogOpen, setCamoufoxConfigDialogOpen] =
     useState(false);
   const [groupManagementDialogOpen, setGroupManagementDialogOpen] =
@@ -176,6 +188,12 @@ export default function Home() {
   >([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [savedViews, setSavedViews] = useState<SavedProfileView[]>([]);
+  const [profileViewMode, setProfileViewMode] =
+    useState<ProfileViewMode>("active");
+  const [archivedProfileIds, setArchivedProfileIds] = useState<string[]>([]);
+  const [pinnedProfileIds, setPinnedProfileIds] = useState<string[]>([]);
+  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
@@ -202,10 +220,147 @@ export default function Home() {
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("buglogin.profile.savedViews.v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as SavedProfileView[];
+      if (Array.isArray(parsed)) {
+        setSavedViews(parsed);
+      }
+    } catch {
+      setSavedViews([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "buglogin.profile.savedViews.v1",
+        JSON.stringify(savedViews),
+      );
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [savedViews]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(
+        "buglogin.profile.archivedIds.v1",
+      );
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed)) {
+        setArchivedProfileIds(parsed);
+      }
+    } catch {
+      setArchivedProfileIds([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "buglogin.profile.archivedIds.v1",
+        JSON.stringify(archivedProfileIds),
+      );
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [archivedProfileIds]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("buglogin.profile.pinnedIds.v1");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed)) {
+        setPinnedProfileIds(parsed);
+      }
+    } catch {
+      setPinnedProfileIds([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "buglogin.profile.pinnedIds.v1",
+        JSON.stringify(pinnedProfileIds),
+      );
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [pinnedProfileIds]);
+
+  useEffect(() => {
+    const profileIdSet = new Set(profiles.map((profile) => profile.id));
+    setArchivedProfileIds((prev) => prev.filter((id) => profileIdSet.has(id)));
+    setPinnedProfileIds((prev) => prev.filter((id) => profileIdSet.has(id)));
+  }, [profiles]);
+
+  const requireTeamPermission = useCallback(
+    (action: TeamAction): boolean => {
+      if (canPerformTeamAction(teamRole, action)) {
+        return true;
+      }
+
+      showErrorToast(t("sync.team.permissionDenied"));
+      return false;
+    },
+    [t, teamRole],
+  );
+
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
     setSelectedProfiles([]);
   }, []);
+
+  const handleCreateSavedView = useCallback(() => {
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery && selectedGroupId === "default" && !showPinnedOnly) {
+      showErrorToast(t("header.savedViews.nothingToSave"));
+      return;
+    }
+
+    const nextIndex = savedViews.length + 1;
+    const viewName = `${t("header.savedViews.defaultName")} ${nextIndex}`;
+    const nextView: SavedProfileView = {
+      id: crypto.randomUUID(),
+      name: viewName,
+      searchQuery: trimmedQuery,
+      groupId: selectedGroupId,
+      pinnedOnly: showPinnedOnly,
+    };
+
+    setSavedViews((prev) => [nextView, ...prev].slice(0, 20));
+    showSuccessToast(t("header.savedViews.saved"));
+  }, [savedViews.length, searchQuery, selectedGroupId, showPinnedOnly, t]);
+
+  const handleApplySavedView = useCallback(
+    (id: string) => {
+      const view = savedViews.find((item) => item.id === id);
+      if (!view) {
+        showErrorToast(t("header.savedViews.notFound"));
+        return;
+      }
+      setSearchQuery(view.searchQuery);
+      setSelectedGroupId(view.groupId);
+      setShowPinnedOnly(view.pinnedOnly ?? false);
+      setSelectedProfiles([]);
+      showSuccessToast(t("header.savedViews.applied"));
+    },
+    [savedViews, t],
+  );
+
+  const handleDeleteSavedView = useCallback(
+    (id: string) => {
+      setSavedViews((prev) => prev.filter((item) => item.id !== id));
+      showSuccessToast(t("header.savedViews.deleted"));
+    },
+    [t],
+  );
 
   // Check for missing binaries and offer to download them
   const checkMissingBinaries = useCallback(async () => {
@@ -515,7 +670,19 @@ export default function Home() {
       groupId?: string;
       extensionGroupId?: string;
       ephemeral?: boolean;
+      launchAfterCreate?: boolean;
     }) => {
+      if (!requireTeamPermission("create_profile")) {
+        throw new Error("Permission denied for viewer role");
+      }
+
+      const loadingToastId = `profile-create-${Date.now()}`;
+      showToast({
+        id: loadingToastId,
+        type: "loading",
+        title: t("common.buttons.loading"),
+        duration: Number.POSITIVE_INFINITY,
+      });
       try {
         const profile = await invoke<BrowserProfile>(
           "create_browser_profile_new",
@@ -546,137 +713,194 @@ export default function Home() {
           }
         }
 
-        // No need to manually reload - useProfileEvents will handle the update
-      } catch (error) {
-        showErrorToast(
-          `Failed to create profile: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    },
-    [selectedGroupId],
-  );
-
-  const launchProfile = useCallback(async (profile: BrowserProfile) => {
-    console.log("Starting launch for profile:", profile.name);
-
-    // Show one-time warning about window resizing for fingerprinted browsers
-    if (profile.browser === "camoufox" || profile.browser === "wayfern") {
-      try {
-        const dismissed = await invoke<boolean>(
-          "get_window_resize_warning_dismissed",
-        );
-        if (!dismissed) {
-          const proceed = await new Promise<boolean>((resolve) => {
-            windowResizeWarningResolver.current = resolve;
-            setWindowResizeWarningBrowserType(profile.browser);
-            setWindowResizeWarningOpen(true);
-          });
-          if (!proceed) {
-            return;
-          }
+        if (profileData.launchAfterCreate) {
+          await invoke<BrowserProfile>("launch_browser_profile", { profile });
+          showSuccessToast(t("toasts.success.profileLaunched"));
+        } else {
+          showSuccessToast(t("toasts.success.profileCreated"));
         }
       } catch (error) {
-        console.error("Failed to check window resize warning:", error);
+        showErrorToast(t("toasts.error.profileCreateFailed"), {
+          description: extractRootError(error),
+        });
+        throw error;
+      } finally {
+        dismissToast(loadingToastId);
       }
-    }
+    },
+    [requireTeamPermission, selectedGroupId, t],
+  );
 
-    try {
-      const result = await invoke<BrowserProfile>("launch_browser_profile", {
-        profile,
-      });
-      console.log("Successfully launched profile:", result.name);
-    } catch (err: unknown) {
-      console.error("Failed to launch browser:", err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      showErrorToast(`Failed to launch browser: ${errorMessage}`);
-      throw err;
-    }
-  }, []);
+  const launchProfile = useCallback(
+    async (profile: BrowserProfile) => {
+      console.log("Starting launch for profile:", profile.name);
 
-  const handleCloneProfile = useCallback((profile: BrowserProfile) => {
-    setCloneProfile(profile);
-  }, []);
-
-  const handleDeleteProfile = useCallback(async (profile: BrowserProfile) => {
-    console.log("Attempting to delete profile:", profile.name);
-
-    try {
-      // First check if the browser is running for this profile
-      const isRunning = await invoke<boolean>("check_browser_status", {
-        profile,
-      });
-
-      if (isRunning) {
-        showErrorToast(
-          "Cannot delete profile while browser is running. Please stop the browser first.",
-        );
-        return;
+      // Show one-time warning about window resizing for fingerprinted browsers
+      if (profile.browser === "camoufox" || profile.browser === "wayfern") {
+        try {
+          const dismissed = await invoke<boolean>(
+            "get_window_resize_warning_dismissed",
+          );
+          if (!dismissed) {
+            const proceed = await new Promise<boolean>((resolve) => {
+              windowResizeWarningResolver.current = resolve;
+              setWindowResizeWarningBrowserType(profile.browser);
+              setWindowResizeWarningOpen(true);
+            });
+            if (!proceed) {
+              return;
+            }
+          }
+        } catch (error) {
+          console.error("Failed to check window resize warning:", error);
+        }
       }
 
-      // Attempt to delete the profile
-      await invoke("delete_profile", { profileId: profile.id });
-      console.log("Profile deletion command completed successfully");
-
-      // No need to manually reload - useProfileEvents will handle the update
-      console.log("Profile deleted successfully");
-    } catch (err: unknown) {
-      console.error("Failed to delete profile:", err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      showErrorToast(`Failed to delete profile: ${errorMessage}`);
-    }
-  }, []);
-
-  const handleRenameProfile = useCallback(
-    async (profileId: string, newName: string) => {
       try {
-        await invoke("rename_profile", { profileId, newName });
-        // No need to manually reload - useProfileEvents will handle the update
+        const result = await invoke<BrowserProfile>("launch_browser_profile", {
+          profile,
+        });
+        console.log("Successfully launched profile:", result.name);
+        showSuccessToast(t("toasts.success.profileLaunched"));
       } catch (err: unknown) {
-        console.error("Failed to rename profile:", err);
-        showErrorToast(`Failed to rename profile: ${JSON.stringify(err)}`);
+        console.error("Failed to launch browser:", err);
+        showErrorToast(t("toasts.error.profileLaunchFailed"), {
+          description: extractRootError(err),
+        });
         throw err;
       }
     },
-    [],
+    [t],
   );
 
-  const handleKillProfile = useCallback(async (profile: BrowserProfile) => {
-    console.log("Starting kill for profile:", profile.name);
+  const handleCloneProfile = useCallback(
+    (profile: BrowserProfile) => {
+      if (!requireTeamPermission("clone_profile")) {
+        return;
+      }
+      setCloneProfile(profile);
+    },
+    [requireTeamPermission],
+  );
 
-    try {
-      await invoke("kill_browser_profile", { profile });
-      console.log("Successfully killed profile:", profile.name);
-      // No need to manually reload - useProfileEvents will handle the update
-    } catch (err: unknown) {
-      console.error("Failed to kill browser:", err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      showErrorToast(`Failed to kill browser: ${errorMessage}`);
-      // Re-throw the error so the table component can handle loading state cleanup
-      throw err;
-    }
-  }, []);
+  const handleDeleteProfile = useCallback(
+    async (profile: BrowserProfile) => {
+      if (!requireTeamPermission("delete_profile")) {
+        return;
+      }
+
+      console.log("Attempting to delete profile:", profile.name);
+
+      try {
+        // First check if the browser is running for this profile
+        const isRunning = await invoke<boolean>("check_browser_status", {
+          profile,
+        });
+
+        if (isRunning) {
+          showErrorToast(
+            "Cannot delete profile while browser is running. Please stop the browser first.",
+          );
+          return;
+        }
+
+        // Attempt to delete the profile
+        await invoke("delete_profile", { profileId: profile.id });
+        setArchivedProfileIds((prev) => prev.filter((id) => id !== profile.id));
+        setPinnedProfileIds((prev) => prev.filter((id) => id !== profile.id));
+        console.log("Profile deletion command completed successfully");
+        showSuccessToast(t("toasts.success.profileDeleted"));
+
+        // No need to manually reload - useProfileEvents will handle the update
+        console.log("Profile deleted successfully");
+      } catch (err: unknown) {
+        console.error("Failed to delete profile:", err);
+        showErrorToast(t("toasts.error.profileDeleteFailed"), {
+          description: extractRootError(err),
+        });
+      }
+    },
+    [requireTeamPermission, t],
+  );
+
+  const handleRenameProfile = useCallback(
+    async (profileId: string, newName: string) => {
+      if (!requireTeamPermission("rename_profile")) {
+        throw new Error("Permission denied for viewer role");
+      }
+
+      try {
+        await invoke("rename_profile", { profileId, newName });
+        showSuccessToast(t("toasts.success.profileUpdated"));
+      } catch (err: unknown) {
+        console.error("Failed to rename profile:", err);
+        showErrorToast(t("toasts.error.profileUpdateFailed"), {
+          description: extractRootError(err),
+        });
+        throw err;
+      }
+    },
+    [requireTeamPermission, t],
+  );
+
+  const handleKillProfile = useCallback(
+    async (profile: BrowserProfile) => {
+      if (!requireTeamPermission("stop_profile")) {
+        throw new Error("Permission denied for viewer role");
+      }
+
+      console.log("Starting stop for profile:", profile.name);
+
+      try {
+        await invoke("kill_browser_profile", { profile });
+        console.log("Successfully stopped profile:", profile.name);
+      } catch (err: unknown) {
+        console.error("Failed to stop browser:", err);
+        showErrorToast(t("toasts.error.profileUpdateFailed"), {
+          description: extractRootError(err),
+        });
+        // Re-throw the error so the table component can handle loading state cleanup
+        throw err;
+      }
+    },
+    [requireTeamPermission, t],
+  );
 
   const handleDeleteSelectedProfiles = useCallback(
     async (profileIds: string[]) => {
+      if (!requireTeamPermission("delete_selected_profiles")) {
+        return;
+      }
+
       try {
         await invoke("delete_selected_profiles", { profileIds });
-        // No need to manually reload - useProfileEvents will handle the update
+        setArchivedProfileIds((prev) =>
+          prev.filter((id) => !profileIds.includes(id)),
+        );
+        setPinnedProfileIds((prev) =>
+          prev.filter((id) => !profileIds.includes(id)),
+        );
+        showSuccessToast(t("toasts.success.profileDeleted"));
       } catch (err: unknown) {
         console.error("Failed to delete selected profiles:", err);
-        showErrorToast(
-          `Failed to delete selected profiles: ${JSON.stringify(err)}`,
-        );
+        showErrorToast(t("toasts.error.profileDeleteFailed"), {
+          description: extractRootError(err),
+        });
       }
     },
-    [],
+    [requireTeamPermission, t],
   );
 
-  const handleAssignProfilesToGroup = useCallback((profileIds: string[]) => {
-    setSelectedProfilesForGroup(profileIds);
-    setGroupAssignmentDialogOpen(true);
-  }, []);
+  const handleAssignProfilesToGroup = useCallback(
+    (profileIds: string[]) => {
+      if (!requireTeamPermission("assign_group")) {
+        return;
+      }
+      setSelectedProfilesForGroup(profileIds);
+      setGroupAssignmentDialogOpen(true);
+    },
+    [requireTeamPermission],
+  );
 
   const handleBulkDelete = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -684,25 +908,101 @@ export default function Home() {
   }, [selectedProfiles]);
 
   const confirmBulkDelete = useCallback(async () => {
+    if (!requireTeamPermission("delete_selected_profiles")) {
+      return;
+    }
+
     if (selectedProfiles.length === 0) return;
 
     setIsBulkDeleting(true);
+    const loadingToastId = `profile-bulk-delete-${Date.now()}`;
+    showToast({
+      id: loadingToastId,
+      type: "loading",
+      title: t("common.buttons.loading"),
+      duration: Number.POSITIVE_INFINITY,
+    });
     try {
       await invoke("delete_selected_profiles", {
         profileIds: selectedProfiles,
       });
-      // No need to manually reload - useProfileEvents will handle the update
+      setArchivedProfileIds((prev) =>
+        prev.filter((id) => !selectedProfiles.includes(id)),
+      );
+      setPinnedProfileIds((prev) =>
+        prev.filter((id) => !selectedProfiles.includes(id)),
+      );
+      showSuccessToast(t("toasts.success.profileDeleted"));
       setSelectedProfiles([]);
       setShowBulkDeleteConfirmation(false);
     } catch (error) {
       console.error("Failed to delete selected profiles:", error);
-      showErrorToast(
-        `Failed to delete selected profiles: ${JSON.stringify(error)}`,
-      );
+      showErrorToast(t("toasts.error.profileDeleteFailed"), {
+        description: extractRootError(error),
+      });
     } finally {
+      dismissToast(loadingToastId);
       setIsBulkDeleting(false);
     }
-  }, [selectedProfiles]);
+  }, [requireTeamPermission, selectedProfiles, t]);
+
+  const handleArchiveProfile = useCallback(
+    (profile: BrowserProfile) => {
+      if (!requireTeamPermission("delete_profile")) {
+        return;
+      }
+      setArchivedProfileIds((prev) => {
+        if (prev.includes(profile.id)) return prev;
+        return [profile.id, ...prev];
+      });
+      setSelectedProfiles((prev) => prev.filter((id) => id !== profile.id));
+      showSuccessToast(t("profiles.actions.archiveSuccess"));
+    },
+    [requireTeamPermission, t],
+  );
+
+  const handleRestoreProfile = useCallback(
+    (profile: BrowserProfile) => {
+      setArchivedProfileIds((prev) => prev.filter((id) => id !== profile.id));
+      showSuccessToast(t("profiles.actions.restoreSuccess"));
+    },
+    [t],
+  );
+
+  const handleArchiveSelectedProfiles = useCallback(() => {
+    if (!requireTeamPermission("delete_selected_profiles")) {
+      return;
+    }
+    if (selectedProfiles.length === 0) return;
+    setArchivedProfileIds((prev) => {
+      const next = new Set(prev);
+      for (const id of selectedProfiles) {
+        next.add(id);
+      }
+      return Array.from(next);
+    });
+    setSelectedProfiles([]);
+    showSuccessToast(t("profiles.actions.archiveSuccess"));
+  }, [requireTeamPermission, selectedProfiles, t]);
+
+  const handlePinProfile = useCallback(
+    (profile: BrowserProfile) => {
+      setPinnedProfileIds((prev) => {
+        if (prev.includes(profile.id)) return prev;
+        return [profile.id, ...prev];
+      });
+      showSuccessToast(t("profiles.actions.pinSuccess"));
+    },
+    [t],
+  );
+
+  const handleUnpinProfile = useCallback(
+    (profile: BrowserProfile) => {
+      setPinnedProfileIds((prev) => prev.filter((id) => id !== profile.id));
+      showSuccessToast(t("profiles.actions.unpinSuccess"));
+    },
+    [t],
+  );
 
   const handleBulkGroupAssignment = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -710,10 +1010,16 @@ export default function Home() {
     setSelectedProfiles([]);
   }, [selectedProfiles, handleAssignProfilesToGroup]);
 
-  const handleAssignExtensionGroup = useCallback((profileIds: string[]) => {
-    setSelectedProfilesForExtensionGroup(profileIds);
-    setExtensionGroupAssignmentDialogOpen(true);
-  }, []);
+  const handleAssignExtensionGroup = useCallback(
+    (profileIds: string[]) => {
+      if (!requireTeamPermission("assign_extension_group")) {
+        return;
+      }
+      setSelectedProfilesForExtensionGroup(profileIds);
+      setExtensionGroupAssignmentDialogOpen(true);
+    },
+    [requireTeamPermission],
+  );
 
   const handleBulkExtensionGroupAssignment = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -726,10 +1032,16 @@ export default function Home() {
     setSelectedProfilesForExtensionGroup([]);
   }, []);
 
-  const handleAssignProfilesToProxy = useCallback((profileIds: string[]) => {
-    setSelectedProfilesForProxy(profileIds);
-    setProxyAssignmentDialogOpen(true);
-  }, []);
+  const handleAssignProfilesToProxy = useCallback(
+    (profileIds: string[]) => {
+      if (!requireTeamPermission("assign_proxy")) {
+        return;
+      }
+      setSelectedProfilesForProxy(profileIds);
+      setProxyAssignmentDialogOpen(true);
+    },
+    [requireTeamPermission],
+  );
 
   const handleBulkProxyAssignment = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -787,6 +1099,10 @@ export default function Home() {
 
   const handleToggleProfileSync = useCallback(
     async (profile: BrowserProfile) => {
+      if (!requireTeamPermission("toggle_profile_sync")) {
+        return;
+      }
+
       try {
         const enabling = !profile.sync_mode || profile.sync_mode === "Disabled";
         await invoke("set_profile_sync_mode", {
@@ -803,7 +1119,7 @@ export default function Home() {
         showErrorToast("Failed to update sync settings");
       }
     },
-    [],
+    [requireTeamPermission],
   );
 
   useEffect(() => {
@@ -1023,13 +1339,18 @@ export default function Home() {
 
   // Filter data by selected group and search query
   const filteredProfiles = useMemo(() => {
-    let filtered = profiles;
+    const archivedIdSet = new Set(archivedProfileIds);
+    const pinnedIdSet = new Set(pinnedProfileIds);
+    let filtered =
+      profileViewMode === "archived"
+        ? profiles.filter((profile) => archivedIdSet.has(profile.id))
+        : profiles.filter((profile) => !archivedIdSet.has(profile.id));
 
     // Filter by group
     if (!selectedGroupId || selectedGroupId === "default") {
-      filtered = profiles.filter((profile) => !profile.group_id);
+      filtered = filtered.filter((profile) => !profile.group_id);
     } else {
-      filtered = profiles.filter(
+      filtered = filtered.filter(
         (profile) => profile.group_id === selectedGroupId,
       );
     }
@@ -1052,65 +1373,166 @@ export default function Home() {
       });
     }
 
+    if (showPinnedOnly) {
+      filtered = filtered.filter((profile) => pinnedIdSet.has(profile.id));
+    }
+
+    filtered.sort((left, right) => {
+      const leftPinned = pinnedIdSet.has(left.id) ? 1 : 0;
+      const rightPinned = pinnedIdSet.has(right.id) ? 1 : 0;
+      if (leftPinned !== rightPinned) {
+        return rightPinned - leftPinned;
+      }
+      return left.name.localeCompare(right.name);
+    });
+
     return filtered;
-  }, [profiles, selectedGroupId, searchQuery]);
+  }, [
+    profiles,
+    selectedGroupId,
+    searchQuery,
+    archivedProfileIds,
+    pinnedProfileIds,
+    profileViewMode,
+    showPinnedOnly,
+  ]);
 
   // Update loading states
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
 
+  const renderActiveSection = () => {
+    switch (activeSection) {
+      case "proxies":
+        return (
+          <ProxyManagementDialog
+            isOpen={true}
+            onClose={() => void 0}
+            mode="page"
+          />
+        );
+      case "settings":
+        return (
+          <SettingsDialog
+            isOpen={true}
+            onClose={() => void 0}
+            onIntegrationsOpen={() => setActiveSection("integrations")}
+            mode="page"
+          />
+        );
+      case "integrations":
+        return (
+          <IntegrationsDialog
+            isOpen={true}
+            onClose={() => void 0}
+            mode="page"
+          />
+        );
+      default:
+        return (
+          <WorkspacePageShell
+            title={t("shell.sections.profiles")}
+            actions={
+              <ProfilesWorkspaceHeaderActions
+                onCreateProfileDialogOpen={setCreateProfileDialogOpen}
+                onGroupManagementDialogOpen={setGroupManagementDialogOpen}
+                onImportProfileDialogOpen={setImportProfileDialogOpen}
+                onProxyPageOpen={() => setActiveSection("proxies")}
+                onSettingsPageOpen={() => setActiveSection("settings")}
+                onSyncConfigDialogOpen={setSyncConfigDialogOpen}
+                onIntegrationsPageOpen={() => setActiveSection("integrations")}
+                onExtensionManagementDialogOpen={
+                  setExtensionManagementDialogOpen
+                }
+                crossOsUnlocked={crossOsUnlocked}
+              />
+            }
+            toolbar={
+              <ProfilesWorkspaceToolbar
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                selectedGroupId={selectedGroupId}
+                savedViews={savedViews}
+                onCreateSavedView={handleCreateSavedView}
+                onApplySavedView={handleApplySavedView}
+                onDeleteSavedView={handleDeleteSavedView}
+                profileViewMode={profileViewMode}
+                onToggleProfileViewMode={() =>
+                  setProfileViewMode((prev) =>
+                    prev === "active" ? "archived" : "active",
+                  )
+                }
+                archivedCount={archivedProfileIds.length}
+                pinnedCount={pinnedProfileIds.length}
+                showPinnedOnly={showPinnedOnly}
+                onTogglePinnedOnly={() => setShowPinnedOnly((prev) => !prev)}
+              />
+            }
+            contentClassName="max-w-none space-y-4 pb-0"
+          >
+            <GroupBadges
+              selectedGroupId={selectedGroupId}
+              onGroupSelect={handleSelectGroup}
+              groups={groupsData}
+              isLoading={isLoading}
+            />
+            <ProfilesDataTable
+              profiles={filteredProfiles}
+              onLaunchProfile={launchProfile}
+              onKillProfile={handleKillProfile}
+              onCloneProfile={handleCloneProfile}
+              onDeleteProfile={handleDeleteProfile}
+              onRenameProfile={handleRenameProfile}
+              onConfigureCamoufox={handleConfigureCamoufox}
+              onCopyCookiesToProfile={handleCopyCookiesToProfile}
+              onOpenCookieManagement={handleOpenCookieManagement}
+              runningProfiles={runningProfiles}
+              isUpdating={isUpdating}
+              onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
+              onAssignProfilesToGroup={handleAssignProfilesToGroup}
+              selectedGroupId={selectedGroupId}
+              selectedProfiles={selectedProfiles}
+              onSelectedProfilesChange={setSelectedProfiles}
+              onBulkDelete={handleBulkDelete}
+              onBulkGroupAssignment={handleBulkGroupAssignment}
+              onBulkProxyAssignment={handleBulkProxyAssignment}
+              onBulkCopyCookies={handleBulkCopyCookies}
+              onBulkExtensionGroupAssignment={
+                handleBulkExtensionGroupAssignment
+              }
+              onBulkArchive={handleArchiveSelectedProfiles}
+              onAssignExtensionGroup={handleAssignExtensionGroup}
+              onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
+              onToggleProfileSync={handleToggleProfileSync}
+              onArchiveProfile={handleArchiveProfile}
+              onRestoreProfile={handleRestoreProfile}
+              isProfileArchived={(profileId) =>
+                archivedProfileIds.includes(profileId)
+              }
+              onPinProfile={handlePinProfile}
+              onUnpinProfile={handleUnpinProfile}
+              isProfilePinned={(profileId) =>
+                pinnedProfileIds.includes(profileId)
+              }
+              crossOsUnlocked={crossOsUnlocked}
+              syncUnlocked={syncUnlocked}
+            />
+          </WorkspacePageShell>
+        );
+    }
+  };
+
   return (
-    <div className="grid items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
-      <main className="flex flex-col items-center w-full max-w-3xl">
-        <div className="w-full">
-          <HomeHeader
-            onCreateProfileDialogOpen={setCreateProfileDialogOpen}
-            onGroupManagementDialogOpen={setGroupManagementDialogOpen}
-            onImportProfileDialogOpen={setImportProfileDialogOpen}
-            onProxyManagementDialogOpen={setProxyManagementDialogOpen}
-            onSettingsDialogOpen={setSettingsDialogOpen}
-            onSyncConfigDialogOpen={setSyncConfigDialogOpen}
-            onIntegrationsDialogOpen={setIntegrationsDialogOpen}
-            onExtensionManagementDialogOpen={setExtensionManagementDialogOpen}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-            crossOsUnlocked={crossOsUnlocked}
-          />
-        </div>
-        <div className="w-full mt-2.5">
-          <GroupBadges
-            selectedGroupId={selectedGroupId}
-            onGroupSelect={handleSelectGroup}
-            groups={groupsData}
-            isLoading={isLoading}
-          />
-          <ProfilesDataTable
-            profiles={filteredProfiles}
-            onLaunchProfile={launchProfile}
-            onKillProfile={handleKillProfile}
-            onCloneProfile={handleCloneProfile}
-            onDeleteProfile={handleDeleteProfile}
-            onRenameProfile={handleRenameProfile}
-            onConfigureCamoufox={handleConfigureCamoufox}
-            onCopyCookiesToProfile={handleCopyCookiesToProfile}
-            onOpenCookieManagement={handleOpenCookieManagement}
-            runningProfiles={runningProfiles}
-            isUpdating={isUpdating}
-            onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
-            onAssignProfilesToGroup={handleAssignProfilesToGroup}
-            selectedGroupId={selectedGroupId}
-            selectedProfiles={selectedProfiles}
-            onSelectedProfilesChange={setSelectedProfiles}
-            onBulkDelete={handleBulkDelete}
-            onBulkGroupAssignment={handleBulkGroupAssignment}
-            onBulkProxyAssignment={handleBulkProxyAssignment}
-            onBulkCopyCookies={handleBulkCopyCookies}
-            onBulkExtensionGroupAssignment={handleBulkExtensionGroupAssignment}
-            onAssignExtensionGroup={handleAssignExtensionGroup}
-            onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
-            onToggleProfileSync={handleToggleProfileSync}
-            crossOsUnlocked={crossOsUnlocked}
-            syncUnlocked={syncUnlocked}
-          />
+    <div className="flex h-screen overflow-hidden bg-background text-[13px] leading-[1.35] tracking-[-0.005em] font-(family-name:--font-sans)">
+      <AppSidebar
+        activeSection={activeSection}
+        collapsed={sidebarCollapsed}
+        onSectionChange={setActiveSection}
+        onCollapsedChange={setSidebarCollapsed}
+      />
+
+      <main className="app-shell-safe flex min-w-0 flex-1 flex-col overflow-hidden pl-6 pb-4 md:pl-8 md:pb-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {renderActiveSection()}
         </div>
       </main>
 
@@ -1124,35 +1546,10 @@ export default function Home() {
         crossOsUnlocked={crossOsUnlocked}
       />
 
-      <SettingsDialog
-        isOpen={settingsDialogOpen}
-        onClose={() => {
-          setSettingsDialogOpen(false);
-        }}
-        onIntegrationsOpen={() => {
-          setSettingsDialogOpen(false);
-          setIntegrationsDialogOpen(true);
-        }}
-      />
-
-      <IntegrationsDialog
-        isOpen={integrationsDialogOpen}
-        onClose={() => {
-          setIntegrationsDialogOpen(false);
-        }}
-      />
-
       <ImportProfileDialog
         isOpen={importProfileDialogOpen}
         onClose={() => {
           setImportProfileDialogOpen(false);
-        }}
-      />
-
-      <ProxyManagementDialog
-        isOpen={proxyManagementDialogOpen}
-        onClose={() => {
-          setProxyManagementDialogOpen(false);
         }}
       />
 
@@ -1311,17 +1708,6 @@ export default function Home() {
       <WayfernTermsDialog
         isOpen={!termsLoading && termsAccepted === false}
         onAccepted={checkTerms}
-      />
-
-      {/* Commercial Trial Modal - shown once when trial expires */}
-      <CommercialTrialModal
-        isOpen={
-          !termsLoading &&
-          termsAccepted === true &&
-          trialStatus?.type === "Expired" &&
-          !trialAcknowledged
-        }
-        onClose={checkTrialStatus}
       />
 
       {/* Launch on Login Dialog - shown on every startup until enabled or declined */}

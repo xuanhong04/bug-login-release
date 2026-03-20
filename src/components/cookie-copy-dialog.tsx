@@ -328,134 +328,138 @@ export function CookieCopyDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
-          <div className="space-y-2">
-            <Label>Source Profile</Label>
-            <Select
-              value={sourceProfileId ?? undefined}
-              onValueChange={handleSourceChange}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a profile to copy cookies from" />
-              </SelectTrigger>
-              <SelectContent>
-                {eligibleSourceProfiles.map((profile) => {
-                  const IconComponent = getBrowserIcon(profile.browser);
-                  const isRunning = runningProfiles.has(profile.id);
-                  return (
-                    <SelectItem
-                      key={profile.id}
-                      value={profile.id}
-                      disabled={isRunning}
-                    >
-                      <div className="flex items-center gap-2">
-                        {IconComponent && <IconComponent className="w-4 h-4" />}
-                        <span>{profile.name}</span>
-                        {isRunning && (
-                          <span className="text-xs text-muted-foreground">
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Source Profile</Label>
+              <Select
+                value={sourceProfileId ?? undefined}
+                onValueChange={handleSourceChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a profile to copy cookies from" />
+                </SelectTrigger>
+                <SelectContent>
+                  {eligibleSourceProfiles.map((profile) => {
+                    const IconComponent = getBrowserIcon(profile.browser);
+                    const isRunning = runningProfiles.has(profile.id);
+                    return (
+                      <SelectItem
+                        key={profile.id}
+                        value={profile.id}
+                        disabled={isRunning}
+                      >
+                        <div className="flex items-center gap-2">
+                          {IconComponent && (
+                            <IconComponent className="w-4 h-4" />
+                          )}
+                          <span>{profile.name}</span>
+                          {isRunning && (
+                            <span className="text-xs text-muted-foreground">
+                              (running)
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Target Profiles ({targetProfiles.length})</Label>
+              <ScrollArea className="p-2 bg-muted rounded-md max-h-20">
+                {targetProfiles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {sourceProfileId
+                      ? "No other Wayfern/Camoufox profiles selected"
+                      : "Select a source profile first"}
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {targetProfiles.map((p) => (
+                      <span
+                        key={p.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-background rounded text-sm"
+                      >
+                        {p.name}
+                        {runningProfiles.has(p.id) && (
+                          <span className="text-xs text-destructive">
                             (running)
                           </span>
                         )}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Target Profiles ({targetProfiles.length})</Label>
-            <div className="p-2 bg-muted rounded-md max-h-20 overflow-y-auto">
-              {targetProfiles.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {sourceProfileId
-                    ? "No other Wayfern/Camoufox profiles selected"
-                    : "Select a source profile first"}
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  {targetProfiles.map((p) => (
-                    <span
-                      key={p.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-background rounded text-sm"
-                    >
-                      {p.name}
-                      {runningProfiles.has(p.id) && (
-                        <span className="text-xs text-destructive">
-                          (running)
-                        </span>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {sourceProfileId && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>
-                  Select Cookies{" "}
-                  {cookieData && (
-                    <span className="text-muted-foreground">
-                      ({selectedCookieCount} of {cookieData.total_count}{" "}
-                      selected)
-                    </span>
-                  )}
-                </Label>
-              </div>
-
-              <div className="relative">
-                <LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search domains or cookies..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-
-              {isLoadingCookies ? (
-                <div className="flex items-center justify-center h-40">
-                  <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
-                </div>
-              ) : error ? (
-                <div className="p-4 text-center text-destructive bg-destructive/10 rounded-md">
-                  {error}
-                </div>
-              ) : filteredDomains.length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground">
-                  {searchQuery
-                    ? "No matching cookies found"
-                    : "No cookies found"}
-                </div>
-              ) : (
-                <ScrollArea className="h-[250px] border rounded-md">
-                  <div className="p-2 space-y-1">
-                    {filteredDomains.map((domain) => (
-                      <DomainRow
-                        key={domain.domain}
-                        domain={domain}
-                        selection={selection}
-                        isExpanded={expandedDomains.has(domain.domain)}
-                        onToggleDomain={toggleDomain}
-                        onToggleCookie={toggleCookie}
-                        onToggleExpand={toggleExpand}
-                      />
+                      </span>
                     ))}
                   </div>
-                </ScrollArea>
-              )}
-
-              <p className="text-xs text-muted-foreground">
-                Existing cookies with the same name and domain will be replaced.
-                Other cookies will be kept.
-              </p>
+                )}
+              </ScrollArea>
             </div>
-          )}
-        </div>
+
+            {sourceProfileId && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>
+                    Select Cookies{" "}
+                    {cookieData && (
+                      <span className="text-muted-foreground">
+                        ({selectedCookieCount} of {cookieData.total_count}{" "}
+                        selected)
+                      </span>
+                    )}
+                  </Label>
+                </div>
+
+                <div className="relative">
+                  <LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search domains or cookies..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+
+                {isLoadingCookies ? (
+                  <div className="flex items-center justify-center h-40">
+                    <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+                  </div>
+                ) : error ? (
+                  <div className="p-4 text-center text-destructive bg-destructive/10 rounded-md">
+                    {error}
+                  </div>
+                ) : filteredDomains.length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground">
+                    {searchQuery
+                      ? "No matching cookies found"
+                      : "No cookies found"}
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[250px] border rounded-md">
+                    <div className="p-2 space-y-1">
+                      {filteredDomains.map((domain) => (
+                        <DomainRow
+                          key={domain.domain}
+                          domain={domain}
+                          selection={selection}
+                          isExpanded={expandedDomains.has(domain.domain)}
+                          onToggleDomain={toggleDomain}
+                          onToggleCookie={toggleCookie}
+                          onToggleExpand={toggleExpand}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
+
+                <p className="text-xs text-muted-foreground">
+                  Existing cookies with the same name and domain will be
+                  replaced. Other cookies will be kept.
+                </p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
 
         <DialogFooter>
           <RippleButton

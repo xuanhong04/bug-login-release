@@ -4,6 +4,7 @@ use crate::camoufox_manager::CamoufoxConfig;
 use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
+use crate::profile::types::RuntimeState;
 use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
@@ -181,6 +182,7 @@ impl ProfileManager {
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
           created_by_email: None,
+          runtime_state: RuntimeState::Stopped,
         };
 
         match self
@@ -302,6 +304,7 @@ impl ProfileManager {
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
           created_by_email: None,
+          runtime_state: RuntimeState::Stopped,
         };
 
         match self
@@ -355,6 +358,7 @@ impl ProfileManager {
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,
       created_by_email: None,
+      runtime_state: RuntimeState::Stopped,
     };
 
     // Save profile info
@@ -367,25 +371,26 @@ impl ProfileManager {
 
     log::info!("Profile '{name}' created successfully with ID: {profile_id}");
 
-    // Create user.js with common Firefox preferences and apply proxy settings if provided
+    // Create user.js with common Firefox preferences.
+    // Upstream proxies are always applied at launch time through the local BugLogin proxy
+    // so credentials are not written into on-disk browser prefs here.
     // Skip for ephemeral profiles since the data dir is created at launch time
     if !ephemeral {
-      if let Some(proxy_id_ref) = &proxy_id {
-        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
-          self.apply_proxy_settings_to_profile(&profile_data_dir, &proxy_settings, None)?;
-        } else {
-          // Proxy ID provided but not found, disable proxy
-          self.disable_proxy_settings_in_profile(&profile_data_dir)?;
-        }
-      } else {
-        // Create user.js with common Firefox preferences but no proxy
-        self.disable_proxy_settings_in_profile(&profile_data_dir)?;
-      }
+      self.disable_proxy_settings_in_profile(&profile_data_dir)?;
     }
 
     // Emit profile creation event
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+    if let Err(e) = events::emit_audit_event(
+      "create",
+      "profile",
+      Some(&profile.id.to_string()),
+      "success",
+      Some(&format!("Created profile '{}'", profile.name)),
+    ) {
+      log::warn!("Warning: Failed to emit audit event for profile create: {e}");
     }
 
     Ok(profile)
@@ -472,6 +477,15 @@ impl ProfileManager {
     // Emit profile rename event
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+    if let Err(e) = events::emit_audit_event(
+      "rename",
+      "profile",
+      Some(&profile.id.to_string()),
+      "success",
+      Some(&format!("Renamed profile to '{}'", profile.name)),
+    ) {
+      log::warn!("Warning: Failed to emit audit event for profile rename: {e}");
     }
 
     Ok(profile)
@@ -561,6 +575,15 @@ impl ProfileManager {
     // Emit profile deletion event
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+    if let Err(e) = events::emit_audit_event(
+      "delete",
+      "profile",
+      Some(profile_id),
+      "success",
+      Some(&format!("Deleted profile '{}'", profile.name)),
+    ) {
+      log::warn!("Warning: Failed to emit audit event for profile delete: {e}");
     }
 
     Ok(())
@@ -911,6 +934,7 @@ impl ProfileManager {
       proxy_bypass_rules: source.proxy_bypass_rules,
       created_by_id: None,
       created_by_email: None,
+      runtime_state: RuntimeState::Stopped,
     };
 
     self.save_profile(&new_profile)?;
@@ -1092,26 +1116,26 @@ impl ProfileManager {
       }
     }
 
-    // Update on-disk browser profile config immediately
+    // Keep on-disk Firefox prefs direct/no-proxy.
+    // The local BugLogin proxy is injected only at launch time so upstream
+    // credentials never leak into browser-owned proxy dialogs.
     if let Some(proxy_id_ref) = &proxy_id {
-      if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
-        let profiles_dir = self.get_profiles_dir();
-        let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-        self
-          .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
-          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            format!("Failed to apply proxy settings: {e}").into()
-          })?;
+      let profiles_dir = self.get_profiles_dir();
+      let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+      let error_prefix = if PROXY_MANAGER
+        .get_proxy_settings_by_id(proxy_id_ref)
+        .is_none()
+      {
+        "Failed to disable proxy settings"
       } else {
-        // Proxy ID provided but proxy not found, disable proxy
-        let profiles_dir = self.get_profiles_dir();
-        let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-        self
-          .disable_proxy_settings_in_profile(&profile_path)
-          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            format!("Failed to disable proxy settings: {e}").into()
-          })?;
-      }
+        "Failed to reset profile proxy settings"
+      };
+
+      self
+        .disable_proxy_settings_in_profile(&profile_path)
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("{error_prefix}: {e}").into()
+        })?;
     } else {
       // No proxy ID provided, disable proxy
       let profiles_dir = self.get_profiles_dir();
@@ -1356,15 +1380,39 @@ impl ProfileManager {
       if let Some(pid) = found_pid {
         if merged.process_id != Some(pid) {
           merged.process_id = Some(pid);
-          if let Err(e) = self.save_profile(&merged) {
-            log::warn!("Warning: Failed to update profile with new PID: {e}");
-          }
+        }
+        if !matches!(
+          merged.runtime_state,
+          RuntimeState::Running | RuntimeState::Parked
+        ) {
+          merged.runtime_state = RuntimeState::Running;
+        }
+        if let Err(e) = self.save_profile(&merged) {
+          log::warn!("Warning: Failed to update profile with new PID: {e}");
         }
       } else if merged.process_id.is_some() {
         // Clear the PID if no process found
         merged.process_id = None;
+        merged.runtime_state = if merged.runtime_state == RuntimeState::Parked {
+          RuntimeState::Crashed
+        } else {
+          RuntimeState::Stopped
+        };
         if let Err(e) = self.save_profile(&merged) {
           log::warn!("Warning: Failed to clear profile PID: {e}");
+        }
+      } else if matches!(
+        merged.runtime_state,
+        RuntimeState::Running | RuntimeState::Parked
+      ) {
+        // Keep runtime state coherent even when PID is already empty.
+        merged.runtime_state = if merged.runtime_state == RuntimeState::Parked {
+          RuntimeState::Crashed
+        } else {
+          RuntimeState::Stopped
+        };
+        if let Err(e) = self.save_profile(&merged) {
+          log::warn!("Warning: Failed to update runtime state after status check: {e}");
         }
       }
 
@@ -1408,8 +1456,20 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
+          let mut should_save = false;
           if latest.process_id != camoufox_process.processId {
             latest.process_id = camoufox_process.processId;
+            should_save = true;
+          }
+          if !matches!(
+            latest.runtime_state,
+            RuntimeState::Running | RuntimeState::Parked
+          ) {
+            latest.runtime_state = RuntimeState::Running;
+            should_save = true;
+          }
+
+          if should_save {
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to update Camoufox profile with process info: {e}");
             }
@@ -1448,8 +1508,18 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
-          if latest.process_id.is_some() {
+          if latest.process_id.is_some()
+            || matches!(
+              latest.runtime_state,
+              RuntimeState::Running | RuntimeState::Parked
+            )
+          {
             latest.process_id = None;
+            latest.runtime_state = if latest.runtime_state == RuntimeState::Parked {
+              RuntimeState::Crashed
+            } else {
+              RuntimeState::Stopped
+            };
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to clear Camoufox profile process info: {e}");
             }
@@ -1482,8 +1552,18 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
-          if latest.process_id.is_some() {
+          if latest.process_id.is_some()
+            || matches!(
+              latest.runtime_state,
+              RuntimeState::Running | RuntimeState::Parked
+            )
+          {
             latest.process_id = None;
+            latest.runtime_state = if latest.runtime_state == RuntimeState::Parked {
+              RuntimeState::Crashed
+            } else {
+              RuntimeState::Stopped
+            };
             if let Err(e2) = self.save_profile(&latest) {
               log::warn!(
                 "Warning: Failed to clear Camoufox profile process info after error: {e2}"
@@ -1532,8 +1612,20 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
+          let mut should_save = false;
           if latest.process_id != wayfern_process.processId {
             latest.process_id = wayfern_process.processId;
+            should_save = true;
+          }
+          if !matches!(
+            latest.runtime_state,
+            RuntimeState::Running | RuntimeState::Parked
+          ) {
+            latest.runtime_state = RuntimeState::Running;
+            should_save = true;
+          }
+
+          if should_save {
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to update Wayfern profile with process info: {e}");
             }
@@ -1572,8 +1664,18 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
-          if latest.process_id.is_some() {
+          if latest.process_id.is_some()
+            || matches!(
+              latest.runtime_state,
+              RuntimeState::Running | RuntimeState::Parked
+            )
+          {
             latest.process_id = None;
+            latest.runtime_state = if latest.runtime_state == RuntimeState::Parked {
+              RuntimeState::Crashed
+            } else {
+              RuntimeState::Stopped
+            };
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to clear Wayfern profile process info: {e}");
             }
@@ -1658,6 +1760,17 @@ impl ProfileManager {
       "user_pref(\"browser.tabs.warnOnClose\", false);".to_string(),
       "user_pref(\"browser.tabs.warnOnCloseOtherTabs\", false);".to_string(),
       "user_pref(\"browser.sessionstore.warnOnQuit\", false);".to_string(),
+      // Restore tabs/windows after a full close/reopen cycle.
+      "user_pref(\"browser.startup.page\", 3);".to_string(),
+      "user_pref(\"browser.sessionstore.resume_from_crash\", true);".to_string(),
+      // Ensure plain keywords are routed to search engine instead of direct host navigation
+      "user_pref(\"keyword.enabled\", true);".to_string(),
+      // Keep normal in-session back/forward navigation behavior.
+      "user_pref(\"places.history.enabled\", true);".to_string(),
+      "user_pref(\"browser.fixup.dns_first_for_single_words\", false);".to_string(),
+      "user_pref(\"browser.urlbar.dnsResolveSingleWordsAfterSearch\", 0);".to_string(),
+      "user_pref(\"browser.search.defaultenginename\", \"Google\");".to_string(),
+      "user_pref(\"browser.search.defaultenginename.US\", \"Google\");".to_string(),
     ]
   }
 
@@ -1758,6 +1871,7 @@ impl ProfileManager {
     profile_data_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let user_js_path = profile_data_path.join("user.js");
+    let prefs_js_path = profile_data_path.join("prefs.js");
     let mut preferences = Vec::new();
 
     // Get the UUID directory (parent of profile data directory)
@@ -1770,6 +1884,16 @@ impl ProfileManager {
 
     preferences.push("user_pref(\"network.proxy.type\", 0);".to_string());
     preferences.push("user_pref(\"network.proxy.failover_direct\", true);".to_string());
+    preferences.push("user_pref(\"network.proxy.http\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.http_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.ssl\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.ssl_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.ftp\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.ftp_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.socks\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.socks_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.socks_version\", 5);".to_string());
+    preferences.push("user_pref(\"network.proxy.no_proxies_on\", \"\");".to_string());
 
     // Create a direct proxy PAC file in UUID directory
     let pac_content = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
@@ -1781,6 +1905,10 @@ impl ProfileManager {
       "user_pref(\"network.proxy.autoconfig_url\", \"{}\");",
       pac_url.as_str()
     ));
+
+    if prefs_js_path.exists() {
+      let _ = fs::remove_file(&prefs_js_path);
+    }
 
     fs::write(user_js_path, preferences.join("\n"))?;
 
@@ -1843,6 +1971,10 @@ mod tests {
     assert!(
       prefs_string.contains("app.update.enabled"),
       "Should contain update preference"
+    );
+    assert!(
+      prefs_string.contains("keyword.enabled"),
+      "Should keep keyword search routing enabled"
     );
   }
 

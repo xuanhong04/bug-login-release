@@ -467,6 +467,34 @@ impl Downloader {
       existing_size = meta.len();
     }
 
+    // Probe expected size to support "already complete" short-circuit and cleaner resume logic.
+    let mut expected_size_from_head: Option<u64> = None;
+    if let Ok(head_response) = self
+      .client
+      .head(&download_url)
+      .header(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+      )
+      .send()
+      .await
+    {
+      if head_response.status().is_success() {
+        expected_size_from_head = head_response.content_length();
+      }
+    }
+
+    if existing_size > 0 && expected_size_from_head == Some(existing_size) {
+      log::info!(
+        "Download already complete for {} {} ({} bytes), reusing file: {}",
+        browser_type.as_str(),
+        version,
+        existing_size,
+        file_path.display()
+      );
+      return Ok(file_path);
+    }
+
     // Build request, add Range only if we have bytes. If the server responds with 416 (Range Not
     // Satisfiable), delete the partial file and retry once without the Range header.
     let response = {
@@ -510,7 +538,7 @@ impl Downloader {
     }
 
     // Determine total size
-    let mut total_size = response.content_length();
+    let mut total_size = response.content_length().or(expected_size_from_head);
 
     // If resuming (206) and Content-Range is present, parse total
     if response.status().as_u16() == 206 {
@@ -574,12 +602,15 @@ impl Downloader {
 
     let _ = events::emit("download-progress", &progress);
 
-    // Open file in append mode (resuming) or create new
+    // Open file in append mode (resuming) or create new.
+    // Use a large write buffer to reduce write syscall frequency on Windows.
     use std::fs::OpenOptions;
-    let mut file = OpenOptions::new()
+    use std::io::Write;
+    let raw_file = OpenOptions::new()
       .create(true)
       .append(true)
       .open(&file_path)?;
+    let mut file = io::BufWriter::with_capacity(8 * 1024 * 1024, raw_file);
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
@@ -592,7 +623,7 @@ impl Downloader {
         }
       }
       let chunk = chunk?;
-      io::copy(&mut chunk.as_ref(), &mut file)?;
+      file.write_all(&chunk)?;
       downloaded += chunk.len() as u64;
 
       let now = std::time::Instant::now();
@@ -642,6 +673,8 @@ impl Downloader {
         last_update = now;
       }
     }
+
+    file.flush()?;
 
     Ok(file_path)
   }
@@ -1150,8 +1183,8 @@ fn find_camoufox_distribution_dirs(browser_dir: &Path) -> Vec<std::path::PathBuf
   dirs
 }
 
-/// Set DuckDuckGo as the default search engine in Camoufox.
-/// Creates or updates distribution/policies.json with a proper DuckDuckGo engine definition.
+/// Set Google as the default search engine in Camoufox.
+/// Creates or updates distribution/policies.json with proper Google and DuckDuckGo definitions.
 /// Called both at download time and at launch time to cover existing installations.
 pub fn configure_camoufox_search_engine(
   browser_dir: &Path,
@@ -1190,28 +1223,14 @@ pub fn configure_camoufox_search_engine(
     }
   };
 
-  // Check if already configured
-  let has_ddg_default = policies
-    .get("policies")
-    .and_then(|p| p.get("SearchEngines"))
-    .and_then(|se| se.get("Default"))
-    .and_then(|d| d.as_str())
-    == Some("DuckDuckGo");
-
-  let has_ddg_engine = policies
-    .get("policies")
-    .and_then(|p| p.get("SearchEngines"))
-    .and_then(|se| se.get("Add"))
-    .and_then(|a| a.as_array())
-    .is_some_and(|arr| {
-      arr
-        .iter()
-        .any(|e| e.get("Name").and_then(|n| n.as_str()) == Some("DuckDuckGo"))
-    });
-
-  if has_ddg_default && has_ddg_engine {
-    return Ok(());
-  }
+  let google_engine = serde_json::json!({
+    "Name": "Google",
+    "URLTemplate": "https://www.google.com/search?q={searchTerms}",
+    "SuggestURLTemplate": "https://www.google.com/complete/search?client=firefox&q={searchTerms}",
+    "Method": "GET",
+    "IconURL": "https://www.google.com/favicon.ico",
+    "Alias": "g"
+  });
 
   let ddg_engine = serde_json::json!({
     "Name": "DuckDuckGo",
@@ -1235,13 +1254,17 @@ pub fn configure_camoufox_search_engine(
     .or_insert(serde_json::json!({}));
 
   if let Some(se_obj) = se.as_object_mut() {
-    // Set DuckDuckGo as default
+    // Set Google as default
     se_obj.insert(
       "Default".to_string(),
-      serde_json::Value::String("DuckDuckGo".to_string()),
+      serde_json::Value::String("Google".to_string()),
     );
 
-    // Add DuckDuckGo engine definition if not present
+    // Legacy bad policy from older Camoufox packages can force an empty search-engine list.
+    // Remove hard blockers so built-in search service can initialize normally.
+    se_obj.remove("PreventInstalls");
+
+    // Add engine definitions if not present
     let add_arr = se_obj
       .entry("Add")
       .or_insert(serde_json::json!([]))
@@ -1251,6 +1274,14 @@ pub fn configure_camoufox_search_engine(
     // Remove fake "None" engine
     add_arr.retain(|entry| entry.get("Name").and_then(|n| n.as_str()) != Some("None"));
 
+    // Add Google if not already present
+    if !add_arr
+      .iter()
+      .any(|e| e.get("Name").and_then(|n| n.as_str()) == Some("Google"))
+    {
+      add_arr.push(google_engine);
+    }
+
     // Add DuckDuckGo if not already present
     if !add_arr
       .iter()
@@ -1259,16 +1290,37 @@ pub fn configure_camoufox_search_engine(
       add_arr.push(ddg_engine);
     }
 
-    // Ensure DuckDuckGo is not in the Remove list
-    if let Some(remove_arr) = se_obj.get_mut("Remove").and_then(|r| r.as_array_mut()) {
-      remove_arr.retain(|v| v.as_str() != Some("DuckDuckGo"));
+    // Remove destructive legacy remove list entirely.
+    se_obj.remove("Remove");
+  }
+
+  // Also scrub legacy Extension uninstall policy for built-in search providers.
+  if let Some(ext_obj) = policies_obj
+    .as_object_mut()
+    .and_then(|obj| obj.get_mut("Extensions"))
+    .and_then(|v| v.as_object_mut())
+  {
+    if let Some(uninstall_arr) = ext_obj.get_mut("Uninstall").and_then(|v| v.as_array_mut()) {
+      const SEARCH_ADDONS: [&str; 5] = [
+        "google@search.mozilla.org",
+        "bing@search.mozilla.org",
+        "amazondotcom@search.mozilla.org",
+        "ebay@search.mozilla.org",
+        "twitter@search.mozilla.org",
+      ];
+      uninstall_arr.retain(|entry| {
+        let Some(id) = entry.as_str() else {
+          return true;
+        };
+        !SEARCH_ADDONS.contains(&id)
+      });
     }
   }
 
   let updated = serde_json::to_string_pretty(&policies)?;
   std::fs::write(&policies_path, updated)?;
   log::info!(
-    "Configured DuckDuckGo search engine in {}",
+    "Configured Google default search engine in {}",
     policies_path.display()
   );
 

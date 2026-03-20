@@ -7,6 +7,7 @@ import fr from "./locales/fr.json";
 import ja from "./locales/ja.json";
 import pt from "./locales/pt.json";
 import ru from "./locales/ru.json";
+import vi from "./locales/vi.json";
 import zh from "./locales/zh.json";
 
 export const SUPPORTED_LANGUAGES = [
@@ -14,6 +15,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: "es", name: "Spanish", nativeName: "Español" },
   { code: "pt", name: "Portuguese", nativeName: "Português" },
   { code: "fr", name: "French", nativeName: "Français" },
+  { code: "vi", name: "Vietnamese", nativeName: "Tiếng Việt" },
   { code: "zh", name: "Chinese", nativeName: "中文" },
   { code: "ja", name: "Japanese", nativeName: "日本語" },
   { code: "ru", name: "Russian", nativeName: "Русский" },
@@ -34,6 +36,8 @@ export const LANGUAGE_FALLBACKS: Record<string, string[]> = {
   "es-ES": ["es", "en"],
   "fr-CA": ["fr", "en"],
   "fr-FR": ["fr", "en"],
+  "vi-VN": ["vi", "en"],
+  vi: ["vi", "en"],
 };
 
 export function getLanguageWithFallback(systemLocale: string): string {
@@ -59,6 +63,7 @@ const resources = {
   es: { translation: es },
   pt: { translation: pt },
   fr: { translation: fr },
+  vi: { translation: vi },
   zh: { translation: zh },
   ja: { translation: ja },
   ru: { translation: ru },

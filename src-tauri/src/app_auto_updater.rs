@@ -116,6 +116,9 @@ pub struct AppAutoUpdater {
   extractor: &'static crate::extraction::Extractor,
 }
 
+const APP_UPDATE_GITHUB_OWNER: &str = "zhom";
+const APP_UPDATE_GITHUB_REPO: &str = "donutbrowser";
+
 impl AppAutoUpdater {
   fn new() -> Self {
     Self {
@@ -205,8 +208,8 @@ impl AppAutoUpdater {
 
       // Build the release page URL
       let release_page_url = format!(
-        "https://github.com/buglogin/buglogin/releases/tag/{}",
-        latest_release.tag_name
+        "https://github.com/{}/{}/releases/tag/{}",
+        APP_UPDATE_GITHUB_OWNER, APP_UPDATE_GITHUB_REPO, latest_release.tag_name
       );
 
       // Find the appropriate asset for current platform
@@ -272,7 +275,10 @@ impl AppAutoUpdater {
   async fn fetch_app_releases(
     &self,
   ) -> Result<Vec<AppRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    let url = "https://api.github.com/repos/buglogin/buglogin/releases?per_page=100";
+    let url = format!(
+      "https://api.github.com/repos/{}/{}/releases?per_page=100",
+      APP_UPDATE_GITHUB_OWNER, APP_UPDATE_GITHUB_REPO
+    );
     let response = self
       .client
       .get(url)

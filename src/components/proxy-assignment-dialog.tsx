@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -147,7 +148,7 @@ export function ProxyAssignmentDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Selected Profiles:</Label>
-            <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto">
+            <ScrollArea className="p-3 bg-muted rounded-md max-h-32">
               <ul className="text-sm space-y-1">
                 {selectedProfiles.map((profileId) => {
                   const profile = profiles.find(
@@ -161,7 +162,7 @@ export function ProxyAssignmentDialog({
                   );
                 })}
               </ul>
-            </div>
+            </ScrollArea>
           </div>
 
           <div className="space-y-2">

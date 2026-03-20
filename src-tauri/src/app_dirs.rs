@@ -24,6 +24,11 @@ pub fn data_dir() -> PathBuf {
     }
   }
 
+  // New canonical name — checked first
+  if let Ok(dir) = std::env::var("BUGLOGIN_DATA_DIR") {
+    return PathBuf::from(dir);
+  }
+  // Legacy name from upstream Donut — kept for backward compatibility
   if let Ok(dir) = std::env::var("DONUTBROWSER_DATA_DIR") {
     return PathBuf::from(dir);
   }
@@ -39,6 +44,11 @@ pub fn cache_dir() -> PathBuf {
     }
   }
 
+  // New canonical name — checked first
+  if let Ok(dir) = std::env::var("BUGLOGIN_CACHE_DIR") {
+    return PathBuf::from(dir);
+  }
+  // Legacy name from upstream Donut — kept for backward compatibility
   if let Ok(dir) = std::env::var("DONUTBROWSER_CACHE_DIR") {
     return PathBuf::from(dir);
   }

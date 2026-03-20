@@ -19,6 +19,7 @@
 
 # production
 /build
+/.sidecar-target/
 
 # misc
 **/*.DS_Store

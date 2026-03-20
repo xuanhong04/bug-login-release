@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { extractRootError } from "@/lib/error-utils";
 import type { BrowserProfile, GroupWithCount } from "@/types";
 
 interface UseProfileEventsReturn {
@@ -27,6 +28,11 @@ export function useProfileEvents(): UseProfileEventsReturn {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const profilesRef = useRef<BrowserProfile[]>([]);
+
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
 
   // Load profiles from backend
   const loadProfiles = useCallback(async () => {
@@ -38,7 +44,7 @@ export function useProfileEvents(): UseProfileEventsReturn {
       setError(null);
     } catch (err: unknown) {
       console.error("Failed to load profiles:", err);
-      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
+      setError(`Failed to load profiles: ${extractRootError(err)}`);
     }
   }, []);
 
@@ -64,6 +70,7 @@ export function useProfileEvents(): UseProfileEventsReturn {
   // Initial load and event listeners setup
   useEffect(() => {
     let profilesUnlisten: (() => void) | undefined;
+    let profileUpdatedUnlisten: (() => void) | undefined;
     let runningUnlisten: (() => void) | undefined;
 
     const setupListeners = async () => {
@@ -80,14 +87,41 @@ export function useProfileEvents(): UseProfileEventsReturn {
           void loadGroups();
         });
 
+        // Keep profile runtime/process fields fresh without full reload.
+        profileUpdatedUnlisten = await listen<BrowserProfile>(
+          "profile-updated",
+          (event) => {
+            const updated = event.payload;
+            setProfiles((prev) => {
+              const index = prev.findIndex((item) => item.id === updated.id);
+              if (index === -1) {
+                return [...prev, updated];
+              }
+
+              const next = [...prev];
+              next[index] = updated;
+              return next;
+            });
+          },
+        );
+
         // Listen for profile running state changes
         runningUnlisten = await listen<{ id: string; is_running: boolean }>(
           "profile-running-changed",
           (event) => {
             const { id, is_running } = event.payload;
+            const latestProfile = profilesRef.current.find((p) => p.id === id);
+            const runtimeState = latestProfile?.runtime_state;
+            const effectiveRunning =
+              runtimeState === "Parked" ||
+              runtimeState === "Stopped" ||
+              runtimeState === "Crashed" ||
+              runtimeState === "Terminating"
+                ? false
+                : is_running || runtimeState === "Running";
             setRunningProfiles((prev) => {
               const next = new Set(prev);
-              if (is_running) {
+              if (effectiveRunning) {
                 next.add(id);
               } else {
                 next.delete(id);
@@ -101,7 +135,7 @@ export function useProfileEvents(): UseProfileEventsReturn {
       } catch (err) {
         console.error("Failed to setup profile event listeners:", err);
         setError(
-          `Failed to setup profile event listeners: ${JSON.stringify(err)}`,
+          `Failed to setup profile event listeners: ${extractRootError(err)}`,
         );
       } finally {
         setIsLoading(false);
@@ -113,6 +147,7 @@ export function useProfileEvents(): UseProfileEventsReturn {
     // Cleanup listeners on unmount
     return () => {
       if (profilesUnlisten) profilesUnlisten();
+      if (profileUpdatedUnlisten) profileUpdatedUnlisten();
       if (runningUnlisten) runningUnlisten();
     };
   }, [loadProfiles, loadGroups]);
@@ -125,9 +160,20 @@ export function useProfileEvents(): UseProfileEventsReturn {
       try {
         const statusChecks = profiles.map(async (profile) => {
           try {
-            const isRunning = await invoke<boolean>("check_browser_status", {
-              profile,
-            });
+            const backendRunning = await invoke<boolean>(
+              "check_browser_status",
+              {
+                profile,
+              },
+            );
+            const runtimeState = profile.runtime_state;
+            const isRunning =
+              runtimeState === "Parked" ||
+              runtimeState === "Stopped" ||
+              runtimeState === "Crashed" ||
+              runtimeState === "Terminating"
+                ? false
+                : backendRunning || runtimeState === "Running";
             return { id: profile.id, isRunning };
           } catch (error) {
             console.error(

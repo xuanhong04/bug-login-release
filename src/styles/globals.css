@@ -3,8 +3,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@font-face {
+  font-family: "Sidebar Inter Local";
+  src: url("/fonts/inter/Inter-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-inter-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -48,6 +56,20 @@
 
 :root {
   --radius: 0.625rem;
+  --window-titlebar-height: 0px;
+  --window-controls-width: 0px;
+  --scrollbar-size: 8px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: color-mix(
+    in oklch,
+    var(--muted-foreground) 28%,
+    transparent
+  );
+  --scrollbar-thumb-hover: color-mix(
+    in oklch,
+    var(--foreground) 36%,
+    transparent
+  );
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
@@ -87,6 +109,17 @@
 }
 
 .dark {
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: color-mix(
+    in oklch,
+    var(--muted-foreground) 42%,
+    transparent
+  );
+  --scrollbar-thumb-hover: color-mix(
+    in oklch,
+    var(--foreground) 54%,
+    transparent
+  );
   --background: oklch(0.141 0.005 285.823);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.21 0.006 285.885);
@@ -129,9 +162,103 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    font-size: 15px;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    letter-spacing: -0.005em;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    overscroll-behavior: none;
   }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  :where(
+      a[href],
+      button:not(:disabled),
+      label[for],
+      summary,
+      [role="button"]:not([aria-disabled="true"]),
+      [role="tab"]:not([aria-disabled="true"]),
+      [role="menuitem"]:not([aria-disabled="true"]),
+      [role="option"]:not([aria-disabled="true"]),
+      [data-slot="button"]:not(:disabled),
+      [data-slot="checkbox"]:not([data-disabled]),
+      [data-slot="select-trigger"]:not([data-disabled]),
+      [data-slot="select-item"]:not([data-disabled]),
+      [data-slot="tabs-trigger"]:not([data-disabled])
+    ) {
+    cursor: pointer;
+  }
+
+  :where(
+      button:disabled,
+      [role="button"][aria-disabled="true"],
+      [role="tab"][aria-disabled="true"],
+      [role="menuitem"][aria-disabled="true"],
+      [role="option"][aria-disabled="true"],
+      [data-slot="button"]:disabled,
+      [data-slot="checkbox"][data-disabled],
+      [data-slot="select-trigger"][data-disabled],
+      [data-slot="select-item"][data-disabled],
+      [data-slot="tabs-trigger"][data-disabled]
+    ) {
+    cursor: not-allowed;
+  }
+}
+
+.app-sidebar-font {
+  font-family:
+    "Sidebar Inter Local", var(--font-inter-sans), "Segoe UI", sans-serif;
+}
+
+body[data-window-platform="windows"] {
+  --window-titlebar-height: 40px;
+  --window-controls-width: 144px;
+}
+
+body[data-window-platform="macos"] {
+  --window-titlebar-height: 40px;
+  --window-controls-width: 0px;
+}
+
+.app-shell-safe {
+  padding-top: calc(var(--window-titlebar-height) + 0.75rem);
+}
+
+.app-shell-safe-header {
+  padding-right: calc(var(--window-controls-width) + 0.5rem);
+}
+
+.app-scroll-gutter {
+  scrollbar-gutter: stable;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
 }
 
 /* Ensure Sonner toasts appear above all dialogs and remain interactive */

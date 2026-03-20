@@ -2,8 +2,9 @@
 
 ## Testing and Quality
 
-- After making changes, run `pnpm format && pnpm lint && pnpm test` at the root of the project
-- Always run this command before finishing a task to ensure the application isn't broken
+- Do not run full-project checks by default.
+- Run `pnpm format && pnpm lint && pnpm test` only when truly needed (high-risk changes, pre-merge/release, or explicit request).
+- If `pnpm tauri dev` is currently running, avoid heavy checks that can trigger long recompilation unless explicitly approved.
 
 ## Code Quality
 
@@ -18,3 +19,13 @@
 ## UI Theming
 
 - When modifying the UI, don't add random colors that are not controlled by `src/lib/themes.ts`
+
+## Workflow Additions
+
+- Use OpenSpec (`openspec/`) for proposal/apply/archive flow on non-trivial changes.
+- Use Superpowers skills where relevant, while keeping user/project instructions as the highest priority.
+- Track multi-step work with beads in `beads/`.
+
+## Runtime Isolation
+
+- Treat Windows as the primary runtime for this repository when dependencies were installed there.

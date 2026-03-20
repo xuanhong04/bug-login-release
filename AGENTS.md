@@ -1,8 +1,9 @@
 # Instructions for AI Agents (Antigravity & Codex)
 
 ## 1. General Coding & Testing
-- After your changes, instead of running specific tests or linting specific files, run `pnpm format && pnpm lint && pnpm test`. First format the code, then lint it, then test it, so that no part is broken after your changes.
-- Before finishing the task and showing a summary, always run `pnpm format && pnpm lint && pnpm test` at the root of the project to ensure you don't finish with a broken application.
+- Do not run full-project checks by default. Prefer minimal verification first (typecheck, targeted test, or no check for docs-only edits).
+- Run `pnpm format && pnpm lint && pnpm test` only when truly needed: high-risk changes, pre-merge/release, or when explicitly requested.
+- If `pnpm tauri dev` is running, avoid heavy commands that may trigger long recompilation or interrupt the active dev flow unless explicitly approved.
 - Don't leave comments that don't add value.
 - Do not duplicate code unless you have a very good reason to do so. It is important that the same logic is not duplicated multiple times.
 - If there is a global singleton of a struct (in Rust), only use it inside a method while properly initializing it, unless explicitly specified otherwise in the request.
@@ -30,3 +31,29 @@
 - BugLogin supports multiple languages.
 - **CRITICAL RULE**: Anytime you make changes that affect copy or add new text, it has to be reflected in all translation files.
 - Use `const { t } = useTranslation()` from `react-i18next`. Example: Use `{t("profile.delete_confirm")}` instead of hardcoded strings.
+
+## 6. Runtime Isolation (Absolute)
+- **Never share `node_modules` between Windows PowerShell and WSL/Linux** for this repository.
+- **Windows-first project workflow**: if this repo was installed in Windows, execute `pnpm dev`, `pnpm tauri ...`, `pnpm format`, `pnpm lint`, and `pnpm test` in Windows (PowerShell/CMD), not WSL.
+- If you run `pnpm install` in Windows, keep running Tauri commands in Windows for that install.
+- If you run `pnpm install` in WSL/Linux, keep running Tauri commands in WSL/Linux for that install.
+- Before running `pnpm dev`, `pnpm tauri ...`, `pnpm format`, `pnpm lint`, or `pnpm test`, the runtime guard script must pass:
+  - `scripts/guard-node-modules-runtime.mjs`
+- If guard fails, reinstall dependencies in the same runtime where you want to execute:
+  - Windows: `Remove-Item -Recurse -Force node_modules && pnpm config set shell-emulator true && pnpm install`
+  - WSL/Linux: `rm -rf node_modules && pnpm install`
+
+## 7. OpenSpec / Superpowers / Beads
+- Use OpenSpec for scoped non-trivial changes: create a proposal under `openspec/changes/<change-id>/` before implementation, then apply and archive when complete.
+- Use Superpowers skills when available and relevant before implementation steps; follow project/user instructions first when conflicts exist.
+- Track work with beads under `docs/workflow/beads/` (small, independent execution items with status) for visibility when tasks are split or long-running.
+
+## 8. Upstream DonutBrowser Intake
+- Upstream source for comparison/sync review: `https://github.com/zhom/donutbrowser`.
+- Never sync upstream blindly. Every upstream commit must be evaluated and logged before local adoption.
+- Canonical intake folder: `docs/workflow/references/upstream-donutbrowser/`.
+- Required artifacts for intake:
+  - `docs/workflow/references/upstream-donutbrowser/upstream-intake-log.md`
+  - `docs/workflow/references/upstream-donutbrowser/commit-review-template.md`
+- Decision states per upstream commit: `adopt | adapt | defer | skip`.
+- If BugLogin has diverged heavily in touched modules, prefer `adapt` over direct port/cherry-pick.

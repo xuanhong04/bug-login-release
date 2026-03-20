@@ -154,7 +154,7 @@ export function CamoufoxConfigDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 h-[300px]">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="py-4">
             {profile.browser === "wayfern" ? (
               <WayfernConfigForm

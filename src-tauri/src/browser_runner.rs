@@ -4,6 +4,7 @@ use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::platform_browser;
+use crate::profile::types::RuntimeState;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::{WayfernConfig, WayfernManager};
@@ -11,6 +12,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
+use url::Url;
 pub struct BrowserRunner {
   pub profile_manager: &'static ProfileManager,
   pub downloaded_browsers_registry: &'static DownloadedBrowsersRegistry,
@@ -102,6 +104,16 @@ impl BrowserRunner {
         );
         CamoufoxConfig::default()
       });
+
+      // Heal legacy Camoufox policies (Default=None, Remove list, search-addon uninstall)
+      // before launch so search engine service initializes correctly.
+      if let Ok(executable_path) = self.get_browser_executable_path(profile) {
+        if let Some(browser_dir) = executable_path.parent() {
+          if let Err(e) = crate::downloader::configure_camoufox_search_engine(browser_dir) {
+            log::warn!("Failed to heal Camoufox search policies before launch: {e}");
+          }
+        }
+      }
 
       // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
       // Refresh cloud proxy credentials if needed before resolving
@@ -232,16 +244,21 @@ impl BrowserRunner {
         None
       };
 
+      let effective_profile_path = if let Some(ref override_path) = override_profile_path {
+        override_path.clone()
+      } else {
+        updated_profile.get_profile_data_path(&self.profile_manager.get_profiles_dir())
+      };
+
+      self
+        .profile_manager
+        .apply_proxy_settings_to_profile(&effective_profile_path, &local_proxy, Some(&local_proxy))
+        .map_err(|e| format!("Failed to apply local Camoufox proxy prefs: {e}"))?;
+
       // Install extensions if an extension group is assigned
       if updated_profile.extension_group_id.is_some() {
-        let profiles_dir = self.profile_manager.get_profiles_dir();
-        let ext_profile_path = if let Some(ref override_path) = override_profile_path {
-          override_path.clone()
-        } else {
-          updated_profile.get_profile_data_path(&profiles_dir)
-        };
         let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
-        match mgr.install_extensions_for_profile(&updated_profile, &ext_profile_path) {
+        match mgr.install_extensions_for_profile(&updated_profile, &effective_profile_path) {
           Ok(paths) => {
             if !paths.is_empty() {
               log::info!(
@@ -280,6 +297,7 @@ impl BrowserRunner {
       // Update profile with the process info from camoufox result
       updated_profile.process_id = Some(process_id);
       updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+      updated_profile.runtime_state = RuntimeState::Running;
 
       // Update the proxy manager with the correct PID
       if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, process_id) {
@@ -534,6 +552,7 @@ impl BrowserRunner {
       // Update profile with the process info
       updated_profile.process_id = Some(process_id);
       updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+      updated_profile.runtime_state = RuntimeState::Running;
 
       // Update the proxy manager with the correct PID
       if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, process_id) {
@@ -789,6 +808,7 @@ impl BrowserRunner {
     let mut updated_profile = profile.clone();
     updated_profile.process_id = Some(actual_pid);
     updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+    updated_profile.runtime_state = RuntimeState::Running;
 
     self.save_process_info(&updated_profile)?;
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -1014,8 +1034,47 @@ impl BrowserRunner {
         return Err("Unsupported platform".into());
       }
       BrowserType::Camoufox => {
-        // Camoufox URL opening is handled differently
-        Err("URL opening in existing Camoufox instance is not supported".into())
+        #[cfg(target_os = "macos")]
+        {
+          let profiles_dir = self.profile_manager.get_profiles_dir();
+          return platform_browser::macos::open_url_in_existing_browser_firefox_like(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+          let profiles_dir = self.profile_manager.get_profiles_dir();
+          return platform_browser::windows::open_url_in_existing_browser_firefox_like(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+          let profiles_dir = self.profile_manager.get_profiles_dir();
+          return platform_browser::linux::open_url_in_existing_browser_firefox_like(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform".into());
       }
       BrowserType::Wayfern => {
         // Wayfern URL opening is handled differently
@@ -1196,18 +1255,52 @@ impl BrowserRunner {
       .find(|p| p.id == profile.id)
       .unwrap_or_else(|| updated_profile.clone());
 
+    let normalized_url = url
+      .as_deref()
+      .map(normalize_navigation_url)
+      .and_then(|value| if value.is_empty() { None } else { Some(value) });
     log::info!(
       "Browser status check - Profile: {} (ID: {}), Running: {}, URL: {:?}, PID: {:?}",
       final_profile.name,
       final_profile.id,
       is_running,
-      url,
+      normalized_url,
       final_profile.process_id
     );
 
-    if is_running && url.is_some() {
+    if is_running && normalized_url.is_none() && final_profile.is_parked() {
+      let mut resumed = final_profile.clone();
+      resumed.runtime_state = RuntimeState::Running;
+      self.save_process_info(&resumed)?;
+      if let Err(e) = crate::browser_window::restore_for_pid(resumed.process_id) {
+        log::debug!(
+          "Failed to restore parked browser window for profile {} (ID: {}): {}",
+          resumed.name,
+          resumed.id,
+          e
+        );
+      }
+      let _ = events::emit("profile-updated", &resumed);
+      let _ = events::emit(
+        "profile-runtime-state-changed",
+        serde_json::json!({
+          "id": resumed.id.to_string(),
+          "runtime_state": "running"
+        }),
+      );
+      let _ = events::emit(
+        "profile-running-changed",
+        serde_json::json!({
+          "id": resumed.id.to_string(),
+          "is_running": true
+        }),
+      );
+      return Ok(resumed);
+    }
+
+    if is_running && normalized_url.is_some() {
       // Browser is running and we have a URL to open
-      if let Some(url_ref) = url.as_ref() {
+      if let Some(url_ref) = normalized_url.as_ref() {
         log::info!("Opening URL in existing browser: {url_ref}");
 
         match self
@@ -1236,7 +1329,7 @@ impl BrowserRunner {
               .launch_browser_internal(
                 app_handle.clone(),
                 &final_profile,
-                url,
+                normalized_url,
                 internal_proxy_settings,
                 None,
                 false,
@@ -1267,7 +1360,7 @@ impl BrowserRunner {
         .launch_browser_internal(
           app_handle.clone(),
           &final_profile,
-          url,
+          normalized_url,
           internal_proxy_settings,
           None,
           false,
@@ -1654,6 +1747,7 @@ impl BrowserRunner {
       // Clear the process ID from the profile
       let mut updated_profile = profile.clone();
       updated_profile.process_id = None;
+      updated_profile.runtime_state = RuntimeState::Stopped;
 
       // Check for pending updates and apply them for Camoufox profiles too
       if let Ok(Some(pending_update)) = self
@@ -1986,6 +2080,7 @@ impl BrowserRunner {
       // Clear the process ID from the profile
       let mut updated_profile = profile.clone();
       updated_profile.process_id = None;
+      updated_profile.runtime_state = RuntimeState::Stopped;
 
       // Check for pending updates and apply them
       if let Ok(Some(pending_update)) = self
@@ -2261,6 +2356,7 @@ impl BrowserRunner {
     // Clear the process ID from the profile
     let mut updated_profile = profile.clone();
     updated_profile.process_id = None;
+    updated_profile.runtime_state = RuntimeState::Stopped;
 
     // Check for pending updates and apply them
     if let Ok(Some(pending_update)) = self
@@ -2516,6 +2612,63 @@ impl BrowserRunner {
   }
 }
 
+fn normalize_navigation_url(raw: &str) -> String {
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return String::new();
+  }
+
+  if Url::parse(trimmed).is_ok() {
+    return trimmed.to_string();
+  }
+
+  let host_candidate = trimmed.trim_end_matches('/').trim();
+  if looks_like_direct_host(host_candidate) {
+    return format!("http://{}", host_candidate);
+  }
+
+  let encoded: String = url::form_urlencoded::byte_serialize(trimmed.as_bytes()).collect();
+  format!("https://www.google.com/search?q={encoded}")
+}
+
+fn looks_like_direct_host(value: &str) -> bool {
+  if value.is_empty() {
+    return false;
+  }
+
+  let lowered = value.to_ascii_lowercase();
+  if lowered == "localhost" {
+    return true;
+  }
+
+  if value.parse::<std::net::IpAddr>().is_ok() {
+    return true;
+  }
+
+  // Domain-like values should navigate directly, e.g. example.com or intranet.local:8080.
+  value.contains('.')
+}
+
+async fn preflight_check_profile_proxy(profile: &BrowserProfile) -> Result<(), String> {
+  let Some(proxy_id) = profile.proxy_id.as_ref() else {
+    return Ok(());
+  };
+
+  if PROXY_MANAGER.is_cloud_or_derived(proxy_id) {
+    CLOUD_AUTH.sync_cloud_proxy().await;
+  }
+
+  let proxy_settings = PROXY_MANAGER
+    .get_proxy_settings_by_id(proxy_id)
+    .ok_or_else(|| format!("Assigned proxy '{proxy_id}' was not found"))?;
+
+  PROXY_MANAGER
+    .check_proxy_validity(proxy_id, &proxy_settings)
+    .await
+    .map(|_| ())
+    .map_err(|e| format!("Proxy check failed for profile '{}': {e}", profile.name))
+}
+
 #[tauri::command]
 pub async fn launch_browser_profile(
   app_handle: tauri::AppHandle,
@@ -2565,9 +2718,11 @@ pub async fn launch_browser_profile(
     profile_for_launch.id
   );
 
+  preflight_check_profile_proxy(&profile_for_launch).await?;
+
   // Always start a local proxy before launching (non-Camoufox/Wayfern handled here; they have their own flow)
   // This ensures all traffic goes through the local proxy for monitoring and future features
-  if profile.browser != "camoufox" && profile.browser != "wayfern" {
+  if profile_for_launch.browser != "camoufox" && profile_for_launch.browser != "wayfern" {
     // Determine upstream proxy if configured; otherwise use DIRECT (no upstream)
     let mut upstream_proxy = profile_for_launch
       .proxy_id
@@ -2670,6 +2825,15 @@ pub async fn launch_browser_profile(
   // Launch browser or open URL in existing instance
   let updated_profile = browser_runner.launch_or_open_url(app_handle.clone(), &profile_for_launch, url, internal_proxy_settings.as_ref()).await.map_err(|e| {
     log::info!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
+    if let Err(audit_err) = events::emit_audit_event(
+      "run",
+      "profile",
+      Some(&profile_for_launch.id.to_string()),
+      "failed",
+      Some(&format!("Failed to launch profile '{}': {}", profile_for_launch.name, e)),
+    ) {
+      log::warn!("Failed to emit audit event for profile launch failure: {audit_err}");
+    }
 
     // Emit a failure event to clear loading states in the frontend
     #[derive(serde::Serialize)]
@@ -2700,6 +2864,15 @@ pub async fn launch_browser_profile(
     updated_profile.name,
     updated_profile.id
   );
+  if let Err(e) = events::emit_audit_event(
+    "run",
+    "profile",
+    Some(&updated_profile.id.to_string()),
+    "success",
+    Some(&format!("Launched profile '{}'", updated_profile.name)),
+  ) {
+    log::warn!("Failed to emit audit event for profile launch: {e}");
+  }
 
   // Now update the proxy with the correct PID if we have one
   if let Some(actual_pid) = updated_profile.process_id {
@@ -2717,6 +2890,76 @@ pub fn check_browser_exists(browser_str: String, version: String) -> bool {
   runner
     .downloaded_browsers_registry
     .is_browser_downloaded(&browser_str, &version)
+}
+
+#[tauri::command]
+pub async fn park_browser_profile(
+  app_handle: tauri::AppHandle,
+  profile: BrowserProfile,
+) -> Result<(), String> {
+  if profile.ephemeral {
+    return kill_browser_profile(app_handle, profile).await;
+  }
+
+  let runner = BrowserRunner::instance();
+  let profile_manager = runner.profile_manager;
+
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {e}"))?;
+  let mut latest = profiles
+    .into_iter()
+    .find(|p| p.id == profile.id)
+    .ok_or_else(|| format!("Profile with ID '{}' not found", profile.id))?;
+
+  let is_running = runner
+    .check_browser_status(app_handle, &latest)
+    .await
+    .map_err(|e| format!("Failed to check browser status: {e}"))?;
+  if !is_running {
+    // Keep stop UX resilient when runtime metadata says the profile is live but
+    // a transient status probe misses the process.
+    let optimistic_live =
+      latest.process_id.is_some() || matches!(latest.runtime_state, RuntimeState::Running);
+    if !optimistic_live {
+      return Err("Cannot park profile because browser is not running".to_string());
+    }
+    log::warn!(
+      "Status probe reported not running for profile {} (ID: {}), but runtime metadata indicates active process. Applying optimistic park.",
+      latest.name,
+      latest.id
+    );
+  }
+
+  latest.runtime_state = RuntimeState::Parked;
+  profile_manager
+    .save_profile(&latest)
+    .map_err(|e| format!("Failed to save parked profile state: {e}"))?;
+
+  let _ = events::emit("profile-updated", &latest);
+  let _ = events::emit(
+    "profile-runtime-state-changed",
+    serde_json::json!({
+      "id": latest.id.to_string(),
+      "runtime_state": "parked"
+    }),
+  );
+  let _ = events::emit(
+    "profile-running-changed",
+    serde_json::json!({
+      "id": latest.id.to_string(),
+      "is_running": false
+    }),
+  );
+  if let Err(e) = crate::browser_window::minimize_for_pid(latest.process_id) {
+    log::debug!(
+      "Failed to minimize parked browser window for profile {} (ID: {}): {}",
+      latest.name,
+      latest.id,
+      e
+    );
+  }
+  Ok(())
 }
 
 #[tauri::command]
@@ -2742,6 +2985,15 @@ pub async fn kill_browser_profile(
         profile.name,
         profile.id
       );
+      if let Err(e) = events::emit_audit_event(
+        "stop",
+        "profile",
+        Some(&profile.id.to_string()),
+        "success",
+        Some(&format!("Stopped profile '{}'", profile.name)),
+      ) {
+        log::warn!("Failed to emit audit event for profile stop: {e}");
+      }
 
       // Release team lock if applicable
       crate::team_lock::release_team_lock_if_needed(&profile).await;
@@ -2796,6 +3048,15 @@ pub async fn kill_browser_profile(
     }
     Err(e) => {
       log::info!("Failed to kill browser profile {}: {}", profile.name, e);
+      if let Err(audit_err) = events::emit_audit_event(
+        "stop",
+        "profile",
+        Some(&profile.id.to_string()),
+        "failed",
+        Some(&format!("Failed to stop profile '{}': {}", profile.name, e)),
+      ) {
+        log::warn!("Failed to emit audit event for profile stop failure: {audit_err}");
+      }
 
       // Emit a failure event to clear loading states in the frontend
       #[derive(serde::Serialize)]

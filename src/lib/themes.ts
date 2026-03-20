@@ -365,3 +365,53 @@ export function clearThemeColors(): void {
     root.style.removeProperty(key as string);
   });
 }
+
+function parseHexColor(hex: string): [number, number, number] | null {
+  const normalized = hex.trim().replace("#", "");
+
+  if (normalized.length === 3) {
+    const [r, g, b] = normalized.split("");
+    return [
+      Number.parseInt(`${r}${r}`, 16),
+      Number.parseInt(`${g}${g}`, 16),
+      Number.parseInt(`${b}${b}`, 16),
+    ];
+  }
+
+  if (normalized.length >= 6) {
+    return [
+      Number.parseInt(normalized.slice(0, 2), 16),
+      Number.parseInt(normalized.slice(2, 4), 16),
+      Number.parseInt(normalized.slice(4, 6), 16),
+    ];
+  }
+
+  return null;
+}
+
+function srgbToLinear(channel: number): number {
+  const value = channel / 255;
+  if (value <= 0.04045) {
+    return value / 12.92;
+  }
+  return ((value + 0.055) / 1.055) ** 2.4;
+}
+
+export function getThemeAppearance(
+  colors: Record<string, string> | undefined,
+): "light" | "dark" {
+  const background = colors?.["--background"];
+  const rgb = background ? parseHexColor(background) : null;
+
+  if (!rgb) {
+    return "dark";
+  }
+
+  const [red, green, blue] = rgb;
+  const luminance =
+    0.2126 * srgbToLinear(red) +
+    0.7152 * srgbToLinear(green) +
+    0.0722 * srgbToLinear(blue);
+
+  return luminance >= 0.45 ? "light" : "dark";
+}

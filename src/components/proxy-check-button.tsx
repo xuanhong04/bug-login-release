@@ -2,8 +2,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FiCheck } from "react-icons/fi";
-import { toast } from "sonner";
 import { FlagIcon } from "@/components/flag-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatRelativeTime } from "@/lib/flag-utils";
+import {
+  classifyProxyCheckError,
+  type ProxyCheckFailureMeta,
+} from "@/lib/proxy-check-error";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { ProxyCheckResult, StoredProxy } from "@/types";
 
 interface ProxyCheckButtonProps {
@@ -20,7 +25,10 @@ interface ProxyCheckButtonProps {
   checkingProfileId: string | null;
   cachedResult?: ProxyCheckResult;
   onCheckComplete?: (result: ProxyCheckResult) => void;
-  onCheckFailed?: (result: ProxyCheckResult) => void;
+  onCheckFailed?: (
+    result: ProxyCheckResult,
+    failure: ProxyCheckFailureMeta,
+  ) => void;
   disabled?: boolean;
   setCheckingProfileId?: (id: string | null) => void;
 }
@@ -35,9 +43,11 @@ export function ProxyCheckButton({
   disabled = false,
   setCheckingProfileId,
 }: ProxyCheckButtonProps) {
+  const { t } = useTranslation();
   const [localResult, setLocalResult] = React.useState<
     ProxyCheckResult | undefined
   >(cachedResult);
+  const [lastFailure, setLastFailure] = React.useState<ProxyCheckFailureMeta>();
 
   React.useEffect(() => {
     setLocalResult(cachedResult);
@@ -53,6 +63,7 @@ export function ProxyCheckButton({
         proxySettings: proxy.proxy_settings,
       });
       setLocalResult(result);
+      setLastFailure(undefined);
       onCheckComplete?.(result);
 
       // Show toast with location
@@ -60,26 +71,21 @@ export function ProxyCheckButton({
       if (result.city) locationParts.push(result.city);
       if (result.country) locationParts.push(result.country);
       const location =
-        locationParts.length > 0 ? locationParts.join(", ") : "Unknown";
+        locationParts.length > 0
+          ? locationParts.join(", ")
+          : t("proxies.check.unknownLocation");
 
-      toast.success(
-        <div className="flex flex-col">
-          Your proxy location is:
-          <div className="flex items-center whitespace-nowrap">
-            {location}
-            {result.country_code && (
-              <FlagIcon
-                countryCode={result.country_code}
-                className="ml-1 text-sm"
-              />
-            )}
-          </div>
-        </div>,
+      showSuccessToast(
+        t("proxies.check.messages.location", {
+          location,
+        }),
       );
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      toast.error(`Proxy check failed: ${errorMessage}`);
+      const failure = classifyProxyCheckError(error);
+      setLastFailure(failure);
+      showErrorToast(t("proxies.check.messages.failed"), {
+        description: t(`proxies.check.failures.${failure.category}`),
+      });
 
       // Save failed check result
       const failedResult: ProxyCheckResult = {
@@ -91,7 +97,7 @@ export function ProxyCheckButton({
         is_valid: false,
       };
       setLocalResult(failedResult);
-      onCheckFailed?.(failedResult);
+      onCheckFailed?.(failedResult, failure);
     } finally {
       setCheckingProfileId?.(null);
     }
@@ -102,6 +108,7 @@ export function ProxyCheckButton({
     onCheckComplete,
     onCheckFailed,
     setCheckingProfileId,
+    t,
   ]);
 
   const isCurrentlyChecking = checkingProfileId === profileId;
@@ -133,7 +140,7 @@ export function ProxyCheckButton({
       </TooltipTrigger>
       <TooltipContent>
         {isCurrentlyChecking ? (
-          <p>Checking proxy...</p>
+          <p>{t("proxies.check.tooltips.checking")}</p>
         ) : result?.is_valid ? (
           <div className="space-y-1">
             <p className="flex items-center gap-1">
@@ -141,7 +148,7 @@ export function ProxyCheckButton({
                 <FlagIcon countryCode={result.country_code} />
               )}
               {[result.city, result.country].filter(Boolean).join(", ") ||
-                "Unknown"}
+                t("proxies.check.unknownLocation")}
             </p>
             <p className="text-xs text-primary-foreground/70">
               IP: {result.ip}
@@ -152,13 +159,23 @@ export function ProxyCheckButton({
           </div>
         ) : result && !result.is_valid ? (
           <div>
-            <p>Proxy check failed</p>
+            <p>{t("proxies.check.messages.failed")}</p>
             <p className="text-xs text-primary-foreground/70">
-              Failed {formatRelativeTime(result.timestamp)}
+              {t(
+                `proxies.check.failures.${lastFailure?.category ?? "unknown"}`,
+              )}
+            </p>
+            <p className="text-xs text-primary-foreground/70">
+              {t("proxies.check.tooltips.retryHint")}
+            </p>
+            <p className="text-xs text-primary-foreground/70">
+              {t("proxies.check.tooltips.failedAt", {
+                time: formatRelativeTime(result.timestamp),
+              })}
             </p>
           </div>
         ) : (
-          <p>Check proxy validity</p>
+          <p>{t("proxies.check.tooltips.default")}</p>
         )}
       </TooltipContent>
     </Tooltip>

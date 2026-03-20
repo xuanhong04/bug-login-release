@@ -1,7 +1,7 @@
 messages:
   - role: system
     content: |-
-      You are an issue validation assistant for Donut Browser, an anti-detect browser.
+      You are an issue validation assistant for BugLogin, an anti-detect browser.
 
       Analyze the provided issue content and determine if it contains sufficient information based on these requirements:
 

@@ -8,15 +8,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { CopyToClipboard } from "./ui/copy-to-clipboard";
+import { WorkspacePageShell } from "./workspace-page-shell";
 
 interface AppSettings {
   api_enabled: boolean;
@@ -36,11 +39,13 @@ interface McpConfig {
 interface IntegrationsDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  mode?: "dialog" | "page";
 }
 
 export function IntegrationsDialog({
   isOpen,
   onClose,
+  mode = "dialog",
 }: IntegrationsDialogProps) {
   const [settings, setSettings] = useState<AppSettings>({
     api_enabled: false,
@@ -57,8 +62,11 @@ export function IntegrationsDialog({
   const [showMcpToken, setShowMcpToken] = useState(false);
   const [isApiStarting, setIsApiStarting] = useState(false);
   const [isMcpStarting, setIsMcpStarting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"api" | "mcp">("api");
+  const isVisible = mode === "page" || isOpen;
 
-  const { termsAccepted } = useWayfernTerms();
+  const { termsAccepted, isLoading: isTermsLoading } = useWayfernTerms();
 
   const loadSettings = useCallback(async () => {
     try {
@@ -96,20 +104,25 @@ export function IntegrationsDialog({
     }
   }, []);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadSettings();
-      loadApiServerStatus();
-      loadMcpConfig();
-      loadMcpServerStatus();
+  const loadAll = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        loadSettings(),
+        loadApiServerStatus(),
+        loadMcpConfig(),
+        loadMcpServerStatus(),
+      ]);
+    } finally {
+      setIsLoading(false);
     }
-  }, [
-    isOpen,
-    loadSettings,
-    loadApiServerStatus,
-    loadMcpConfig,
-    loadMcpServerStatus,
-  ]);
+  }, [loadApiServerStatus, loadMcpConfig, loadMcpServerStatus, loadSettings]);
+
+  useEffect(() => {
+    if (isVisible) {
+      void loadAll();
+    }
+  }, [isVisible, loadAll]);
 
   const handleApiToggle = async (enabled: boolean) => {
     setIsApiStarting(true);
@@ -181,6 +194,12 @@ export function IntegrationsDialog({
     return JSON.stringify(
       {
         mcpServers: {
+          "buglogin-browser": {
+            url: `http://127.0.0.1:${mcpConfig.port}/mcp`,
+            headers: {
+              Authorization: `Bearer ${mcpConfig.token}`,
+            },
+          },
           "donut-browser": {
             url: `http://127.0.0.1:${mcpConfig.port}/mcp`,
             headers: {
@@ -199,6 +218,12 @@ export function IntegrationsDialog({
     return JSON.stringify(
       {
         mcpServers: {
+          "buglogin-browser": {
+            url: `http://127.0.0.1:${mcpConfig.port}/mcp`,
+            headers: {
+              Authorization: `Bearer ${obfuscateToken(mcpConfig.token)}`,
+            },
+          },
           "donut-browser": {
             url: `http://127.0.0.1:${mcpConfig.port}/mcp`,
             headers: {
@@ -212,182 +237,260 @@ export function IntegrationsDialog({
     );
   };
 
+  const sectionClass =
+    mode === "page"
+      ? "space-y-4 border-b border-border/70 pb-6 last:border-b-0"
+      : "space-y-4 border-b pb-6 last:border-b-0";
+
+  const apiPanel = (
+    <div className="space-y-4 border-b pb-6 last:border-b-0">
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="api-enabled"
+          checked={apiServerPort !== null}
+          disabled={isApiStarting}
+          onCheckedChange={handleApiToggle}
+        />
+        <div className="grid gap-1.5 leading-none">
+          <Label
+            htmlFor="api-enabled"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Enable Local API Server
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Allow managing profiles, groups, and proxies via REST API.
+          </p>
+        </div>
+      </div>
+
+      {settings.api_enabled && (
+        <div className="space-y-4 rounded-xl border bg-card/60 p-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Port</Label>
+            <div className="flex items-center space-x-2">
+              <Input
+                value={apiServerPort ?? settings.api_port}
+                readOnly
+                className="w-24 font-mono"
+              />
+              <span className="text-xs text-muted-foreground">
+                Server is running
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Authentication Token</Label>
+            <div className="flex items-center space-x-2">
+              <div className="relative flex-1">
+                <Input
+                  type={showApiToken ? "text" : "password"}
+                  value={settings.api_token ?? ""}
+                  readOnly
+                  className="font-mono pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowApiToken(!showApiToken)}
+                >
+                  {showApiToken ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <CopyToClipboard
+                text={settings.api_token ?? ""}
+                successMessage="Token copied"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Include in Authorization header: Bearer {"<token>"}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const mcpPanel = (
+    <div className="space-y-4 border-b pb-6 last:border-b-0">
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="mcp-enabled"
+          checked={settings.mcp_enabled && mcpConfig !== null}
+          disabled={!termsAccepted || isMcpStarting}
+          onCheckedChange={handleMcpToggle}
+        />
+        <div className="grid gap-1.5 leading-none">
+          <Label
+            htmlFor="mcp-enabled"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Enable MCP Server (Model Context Protocol)
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Allow AI assistants like Claude Desktop to control browsers.
+            {!termsAccepted && (
+              <span className="ml-1 text-muted-foreground">
+                (Accept Wayfern terms in Settings first)
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {mcpConfig && (
+        <div className="space-y-4 rounded-xl border bg-card/60 p-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">
+              Claude Desktop Configuration
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Copy this configuration to your Claude Desktop config file at{" "}
+              <code className="bg-muted px-1 rounded">
+                ~/.config/claude/claude_desktop_config.json
+              </code>
+            </p>
+          </div>
+
+          <div className="relative">
+            <pre className="p-3 text-xs font-mono rounded-md bg-background border overflow-x-auto whitespace-pre">
+              {showMcpToken
+                ? getFormattedMcpConfig()
+                : getObfuscatedMcpConfig()}
+            </pre>
+            <div className="absolute top-2 right-2 flex items-center space-x-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setShowMcpToken(!showMcpToken)}
+              >
+                {showMcpToken ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <CopyToClipboard
+                text={getFormattedMcpConfig()}
+                successMessage="Configuration copied"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Available Tools</Label>
+            <ul className="list-disc ml-5 space-y-0.5 text-xs text-muted-foreground">
+              <li>list_profiles - List browser profiles</li>
+              <li>run_profile - Launch a browser</li>
+              <li>kill_profile - Stop a running browser</li>
+              <li>get_profile_status - Check if browser is running</li>
+              <li>list_groups, create_group, etc. - Manage groups</li>
+              <li>list_proxies, create_proxy, etc. - Manage proxies</li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const loadingContent = (
+    <div className="space-y-6">
+      {Array.from({ length: 2 }).map((_, index) => (
+        <section key={`integrations-loading-${index}`} className={sectionClass}>
+          <div className="h-5 w-40 rounded-md bg-card" />
+          <div className="rounded-xl border border-border bg-card/60 p-4">
+            <div className="space-y-3">
+              <div className="h-4 w-56 rounded-md bg-muted" />
+              <div className="h-3 w-80 max-w-full rounded-md bg-muted" />
+              <div className="h-9 w-40 rounded-md bg-muted" />
+            </div>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+
+  const pageContent = activeTab === "api" ? apiPanel : mcpPanel;
+
+  const pageTabs = (
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => setActiveTab(value as "api" | "mcp")}
+      className="min-h-0 min-w-0"
+    >
+      {mode === "page" ? null : (
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="api">Local API</TabsTrigger>
+          <TabsTrigger value="mcp">MCP (AI Assistants)</TabsTrigger>
+        </TabsList>
+      )}
+
+      <TabsContent value="api" className="mt-0 min-h-0 flex-1">
+        {apiPanel}
+      </TabsContent>
+
+      <TabsContent value="mcp" className="mt-0 min-h-0 flex-1">
+        {mcpPanel}
+      </TabsContent>
+    </Tabs>
+  );
+
+  const dialogContent = (
+    <>
+      <div className="app-shell-safe-header shrink-0 border-b px-5 py-4">
+        <DialogHeader>
+          <DialogTitle>Integrations</DialogTitle>
+          <DialogDescription>
+            Keep local API and assistant access available from a full workspace
+            instead of a separate modal stack.
+          </DialogDescription>
+        </DialogHeader>
+      </div>
+
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-5 py-4">
+          {isLoading || isTermsLoading ? loadingContent : pageTabs}
+        </div>
+      </ScrollArea>
+    </>
+  );
+
+  if (mode === "page") {
+    return (
+      <WorkspacePageShell
+        title="Integrations"
+        description="Keep local API and assistant access available from a full workspace instead of a separate modal stack."
+        toolbar={
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as "api" | "mcp")}
+          >
+            <TabsList className="grid w-[240px] grid-cols-2">
+              <TabsTrigger value="api">Local API</TabsTrigger>
+              <TabsTrigger value="mcp">MCP</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        }
+        contentClassName="max-w-none"
+      >
+        {isLoading || isTermsLoading ? loadingContent : pageContent}
+      </WorkspacePageShell>
+    );
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl max-h-[80vh] my-8 flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Integrations</DialogTitle>
-        </DialogHeader>
-
-        <div className="overflow-y-auto flex-1 min-h-0">
-          <Tabs defaultValue="api" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="api">Local API</TabsTrigger>
-              <TabsTrigger value="mcp">MCP (AI Assistants)</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="api" className="space-y-4 mt-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="api-enabled"
-                  checked={apiServerPort !== null}
-                  disabled={isApiStarting}
-                  onCheckedChange={handleApiToggle}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <Label
-                    htmlFor="api-enabled"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Enable Local API Server
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Allow managing profiles, groups, and proxies via REST API.
-                  </p>
-                </div>
-              </div>
-
-              {settings.api_enabled && (
-                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Port</Label>
-                    <div className="flex items-center space-x-2">
-                      <Input
-                        value={apiServerPort ?? settings.api_port}
-                        readOnly
-                        className="w-24 font-mono"
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        Server is running
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Authentication Token
-                    </Label>
-                    <div className="flex items-center space-x-2">
-                      <div className="relative flex-1">
-                        <Input
-                          type={showApiToken ? "text" : "password"}
-                          value={settings.api_token ?? ""}
-                          readOnly
-                          className="font-mono pr-10"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                          onClick={() => setShowApiToken(!showApiToken)}
-                        >
-                          {showApiToken ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                      <CopyToClipboard
-                        text={settings.api_token ?? ""}
-                        successMessage="Token copied"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Include in Authorization header: Bearer {"<token>"}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="mcp" className="space-y-4 mt-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="mcp-enabled"
-                  checked={settings.mcp_enabled && mcpConfig !== null}
-                  disabled={!termsAccepted || isMcpStarting}
-                  onCheckedChange={handleMcpToggle}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <Label
-                    htmlFor="mcp-enabled"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Enable MCP Server (Model Context Protocol)
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Allow AI assistants like Claude Desktop to control browsers.
-                    {!termsAccepted && (
-                      <span className="ml-1 text-orange-600">
-                        (Accept Wayfern terms in Settings first)
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              {mcpConfig && (
-                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Claude Desktop Configuration
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Copy this configuration to your Claude Desktop config file
-                      at{" "}
-                      <code className="bg-muted px-1 rounded">
-                        ~/.config/claude/claude_desktop_config.json
-                      </code>
-                    </p>
-                  </div>
-
-                  <div className="relative">
-                    <pre className="p-3 text-xs font-mono rounded-md bg-background border overflow-x-auto whitespace-pre">
-                      {showMcpToken
-                        ? getFormattedMcpConfig()
-                        : getObfuscatedMcpConfig()}
-                    </pre>
-                    <div className="absolute top-2 right-2 flex items-center space-x-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setShowMcpToken(!showMcpToken)}
-                      >
-                        {showMcpToken ? (
-                          <EyeOff className="h-3.5 w-3.5" />
-                        ) : (
-                          <Eye className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                      <CopyToClipboard
-                        text={getFormattedMcpConfig()}
-                        successMessage="Configuration copied"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Available Tools
-                    </Label>
-                    <ul className="list-disc ml-5 space-y-0.5 text-xs text-muted-foreground">
-                      <li>list_profiles - List browser profiles</li>
-                      <li>run_profile - Launch a browser</li>
-                      <li>kill_profile - Stop a running browser</li>
-                      <li>get_profile_status - Check if browser is running</li>
-                      <li>list_groups, create_group, etc. - Manage groups</li>
-                      <li>list_proxies, create_proxy, etc. - Manage proxies</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
+      <DialogContent className="my-8 flex max-h-[80vh] max-w-xl flex-col p-0">
+        {dialogContent}
       </DialogContent>
     </Dialog>
   );

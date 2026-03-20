@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 /// Trait for emitting events to the frontend or connected clients.
@@ -122,6 +123,41 @@ pub fn emit<S: Serialize>(event: &str, payload: S) -> Result<(), String> {
 /// Emit an event with no payload using the global emitter.
 pub fn emit_empty(event: &str) -> Result<(), String> {
   global_emitter().emit_value(event, serde_json::Value::Null)
+}
+
+#[derive(Serialize)]
+pub struct AuditEventPayload {
+  pub action: String,
+  pub target: String,
+  pub target_id: Option<String>,
+  pub status: String,
+  pub message: Option<String>,
+  pub timestamp: u64,
+}
+
+fn unix_timestamp() -> u64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0)
+}
+
+pub fn emit_audit_event(
+  action: &str,
+  target: &str,
+  target_id: Option<&str>,
+  status: &str,
+  message: Option<&str>,
+) -> Result<(), String> {
+  let payload = AuditEventPayload {
+    action: action.to_string(),
+    target: target.to_string(),
+    target_id: target_id.map(ToString::to_string),
+    status: status.to_string(),
+    message: message.map(ToString::to_string),
+    timestamp: unix_timestamp(),
+  };
+  emit("audit-event", payload)
 }
 
 #[cfg(test)]

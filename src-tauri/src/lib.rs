@@ -16,6 +16,7 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
+mod browser_window;
 pub mod camoufox;
 mod camoufox_manager;
 mod default_browser;
@@ -40,8 +41,8 @@ pub mod traffic_stats;
 mod wayfern_manager;
 mod wayfern_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
+pub mod app_config;
 pub mod cloud_auth;
-mod commercial_license;
 mod cookie_manager;
 pub mod daemon;
 pub mod daemon_client;
@@ -51,6 +52,7 @@ pub mod events;
 mod mcp_server;
 mod tag_manager;
 mod team_lock;
+pub mod vault_password;
 mod version_updater;
 pub mod vpn;
 pub mod vpn_worker_runner;
@@ -58,6 +60,7 @@ pub mod vpn_worker_storage;
 
 use browser_runner::{
   check_browser_exists, kill_browser_profile, launch_browser_profile, open_url_with_profile,
+  park_browser_profile,
 };
 
 use profile::manager::{
@@ -81,10 +84,11 @@ use downloaded_browsers_registry::{
 use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
-  decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login, get_app_settings,
-  get_sync_settings, get_system_language, get_table_sorting_settings,
-  get_window_resize_warning_dismissed, save_app_settings, save_sync_settings,
-  save_table_sorting_settings, should_show_launch_on_login_prompt,
+  decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login,
+  get_app_access_token_state, get_app_settings, get_sync_settings, get_system_language,
+  get_table_sorting_settings, get_window_resize_warning_dismissed, save_app_access_token,
+  save_app_settings, save_sync_settings, save_table_sorting_settings,
+  should_show_launch_on_login_prompt,
 };
 
 use sync::{
@@ -243,6 +247,20 @@ async fn check_proxy_validity(
 }
 
 #[tauri::command]
+async fn benchmark_proxy_protocols(
+  host: String,
+  port: u16,
+  username: Option<String>,
+  password: Option<String>,
+) -> Result<crate::proxy_manager::ProxyProtocolBenchmark, String> {
+  Ok(
+    crate::proxy_manager::PROXY_MANAGER
+      .benchmark_proxy_protocols(host, port, username, password)
+      .await,
+  )
+}
+
+#[tauri::command]
 fn get_cached_proxy_check(proxy_id: String) -> Option<crate::proxy_manager::ProxyCheckResult> {
   crate::proxy_manager::PROXY_MANAGER.get_cached_proxy_check(&proxy_id)
 }
@@ -345,27 +363,6 @@ async fn accept_wayfern_terms() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn get_commercial_trial_status(
-  app_handle: tauri::AppHandle,
-) -> Result<commercial_license::TrialStatus, String> {
-  commercial_license::CommercialLicenseManager::instance()
-    .get_trial_status(&app_handle)
-    .await
-}
-
-#[tauri::command]
-async fn acknowledge_trial_expiration(app_handle: tauri::AppHandle) -> Result<(), String> {
-  commercial_license::CommercialLicenseManager::instance()
-    .acknowledge_expiration(&app_handle)
-    .await
-}
-
-#[tauri::command]
-fn has_acknowledged_trial_expiration(app_handle: tauri::AppHandle) -> Result<bool, String> {
-  commercial_license::CommercialLicenseManager::instance().has_acknowledged(&app_handle)
-}
-
-#[tauri::command]
 async fn start_mcp_server(app_handle: tauri::AppHandle) -> Result<u16, String> {
   mcp_server::McpServer::instance().start(app_handle).await
 }
@@ -407,6 +404,12 @@ async fn get_mcp_config(app_handle: tauri::AppHandle) -> Result<Option<McpConfig
 
   let config_json = serde_json::json!({
     "mcpServers": {
+      "buglogin-browser": {
+        "url": format!("http://127.0.0.1:{}/mcp", port),
+        "headers": {
+          "Authorization": format!("Bearer {}", token)
+        }
+      },
       "donut-browser": {
         "url": format!("http://127.0.0.1:{}/mcp", port),
         "headers": {
@@ -645,16 +648,23 @@ async fn check_vpn_validity(
   // Fetch public IP through the VPN SOCKS5 proxy
   let result = match ip_utils::fetch_public_ip(Some(&socks_url)).await {
     Ok(ip) => {
-      let (city, country, country_code) =
-        crate::proxy_manager::ProxyManager::get_ip_geolocation(&ip)
-          .await
-          .unwrap_or_default();
+      let geo_info = crate::proxy_manager::ProxyManager::get_ip_geolocation(&ip)
+        .await
+        .unwrap_or_default();
 
       crate::proxy_manager::ProxyCheckResult {
         ip,
-        city,
-        country,
-        country_code,
+        city: geo_info.city,
+        country: geo_info.country,
+        country_code: geo_info.country_code,
+        zip: geo_info.zip,
+        timezone: geo_info.timezone,
+        latitude: geo_info.latitude,
+        longitude: geo_info.longitude,
+        isp: geo_info.isp,
+        org: geo_info.org,
+        asn: geo_info.asn,
+        mobile: geo_info.mobile,
         timestamp: now,
         is_valid: true,
       }
@@ -666,6 +676,14 @@ async fn check_vpn_validity(
         city: None,
         country: None,
         country_code: None,
+        zip: None,
+        timezone: None,
+        latitude: None,
+        longitude: None,
+        isp: None,
+        org: None,
+        asn: None,
+        mobile: None,
         timestamp: now,
         is_valid: false,
       }
@@ -837,7 +855,29 @@ pub fn run() {
             .unwrap_or(false);
 
           if !is_running {
-            log::warn!("Daemon is no longer running, quitting GUI immediately");
+            if cfg!(debug_assertions) {
+              log::warn!("Daemon is no longer running in dev mode, attempting to restart it");
+
+              let restarted = tokio::task::spawn_blocking(|| {
+                daemon_spawn::ensure_daemon_running()?;
+                daemon_spawn::register_gui_pid();
+                Ok::<(), String>(())
+              })
+              .await
+              .ok()
+              .and_then(Result::ok)
+              .is_some();
+
+              if restarted {
+                log::info!("Daemon restarted successfully, keeping GUI alive");
+                continue;
+              }
+
+              log::warn!("Daemon restart failed in dev mode, quitting GUI immediately");
+            } else {
+              log::warn!("Daemon is no longer running, quitting GUI immediately");
+            }
+
             // Use process::exit for immediate termination. Tauri's exit()
             // triggers a slow graceful shutdown that can take over a minute
             // waiting for async tasks (sync, version updater, etc.) to finish.
@@ -851,7 +891,8 @@ pub fn run() {
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("BugLogin")
         .inner_size(800.0, 500.0)
-        .resizable(false)
+        .min_inner_size(800.0, 500.0)
+        .resizable(true)
         .fullscreen(false)
         .center()
         .focused(true)
@@ -1146,6 +1187,11 @@ pub fn run() {
               .await
             {
               Ok(is_running) => {
+                let effective_running = is_running
+                  && !matches!(
+                    profile.runtime_state,
+                    crate::profile::types::RuntimeState::Parked
+                  );
                 let profile_id = profile.id.to_string();
                 let last_state = last_running_states
                   .get(&profile_id)
@@ -1153,12 +1199,12 @@ pub fn run() {
                   .unwrap_or(false);
 
                 // Only emit event if state actually changed
-                if last_state != is_running {
+                if last_state != effective_running {
                   log::debug!(
                     "Status checker detected change for profile {}: {} -> {}",
                     profile.name,
                     last_state,
-                    is_running
+                    effective_running
                   );
 
                   #[derive(serde::Serialize)]
@@ -1169,7 +1215,7 @@ pub fn run() {
 
                   let payload = RunningChangedPayload {
                     id: profile_id.clone(),
-                    is_running,
+                    is_running: effective_running,
                   };
 
                   if let Err(e) = events::emit("profile-running-changed", &payload) {
@@ -1178,14 +1224,14 @@ pub fn run() {
                     log::debug!(
                       "Status checker emitted profile-running-changed event for {}: running={}",
                       profile.name,
-                      is_running
+                      effective_running
                     );
                   }
 
-                  last_running_states.insert(profile_id, is_running);
+                  last_running_states.insert(profile_id, effective_running);
                 } else {
                   // Update the state even if unchanged to ensure we have it tracked
-                  last_running_states.insert(profile_id, is_running);
+                  last_running_states.insert(profile_id, effective_running);
                 }
               }
               Err(e) => {
@@ -1338,6 +1384,7 @@ pub fn run() {
       update_profile_note,
       update_profile_proxy_bypass_rules,
       check_browser_status,
+      park_browser_profile,
       kill_browser_profile,
       rename_profile,
       get_app_settings,
@@ -1370,6 +1417,7 @@ pub fn run() {
       update_stored_proxy,
       delete_stored_proxy,
       check_proxy_validity,
+      benchmark_proxy_protocols,
       get_cached_proxy_check,
       export_proxies,
       import_proxies_json,
@@ -1406,6 +1454,8 @@ pub fn run() {
       get_traffic_stats_for_period,
       get_sync_settings,
       save_sync_settings,
+      get_app_access_token_state,
+      save_app_access_token,
       set_profile_sync_mode,
       request_profile_sync,
       set_proxy_sync_enabled,
@@ -1428,9 +1478,6 @@ pub fn run() {
       check_wayfern_terms_accepted,
       check_wayfern_downloaded,
       accept_wayfern_terms,
-      get_commercial_trial_status,
-      acknowledge_trial_expiration,
-      has_acknowledged_trial_expiration,
       start_mcp_server,
       stop_mcp_server,
       get_mcp_server_status,

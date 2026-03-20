@@ -453,7 +453,7 @@ export function TrafficDetailsDialog({
                     <span className="text-right">Sent</span>
                     <span className="text-right">Received</span>
                   </div>
-                  <div className="max-h-[180px] overflow-y-auto">
+                  <ScrollArea className="max-h-[180px]">
                     {topDomainsByTraffic.map((domain, index) => (
                       <div
                         key={domain.domain}
@@ -476,7 +476,7 @@ export function TrafficDetailsDialog({
                         </span>
                       </div>
                     ))}
-                  </div>
+                  </ScrollArea>
                 </div>
               </div>
             )}
@@ -494,7 +494,7 @@ export function TrafficDetailsDialog({
                     <span className="text-right">Requests</span>
                     <span className="text-right">Total Traffic</span>
                   </div>
-                  <div className="max-h-[180px] overflow-y-auto">
+                  <ScrollArea className="max-h-[180px]">
                     {topDomainsByRequests.map((domain, index) => (
                       <div
                         key={domain.domain}
@@ -516,7 +516,7 @@ export function TrafficDetailsDialog({
                         </span>
                       </div>
                     ))}
-                  </div>
+                  </ScrollArea>
                 </div>
               </div>
             )}
@@ -527,7 +527,7 @@ export function TrafficDetailsDialog({
                 <h3 className="text-sm font-medium mb-2">
                   Unique IPs ({stats.unique_ips.length})
                 </h3>
-                <div className="border rounded-md p-3 max-h-[120px] overflow-y-auto">
+                <ScrollArea className="border rounded-md p-3 max-h-[120px]">
                   <div className="flex flex-wrap gap-1.5">
                     {stats.unique_ips.map((ip) => (
                       <span
@@ -538,7 +538,7 @@ export function TrafficDetailsDialog({
                       </span>
                     ))}
                   </div>
-                </div>
+                </ScrollArea>
               </div>
             )}
 

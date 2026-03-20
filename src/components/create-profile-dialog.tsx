@@ -3,9 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { GoPlus } from "react-icons/go";
 import { LoadingButton } from "@/components/loading-button";
-import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,22 +20,27 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WayfernConfigForm } from "@/components/wayfern-config-form";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
-import { useProxyEvents } from "@/hooks/use-proxy-events";
-import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
+import {
+  classifyProxyCheckError,
+  type ProxyCheckFailureMeta,
+} from "@/lib/proxy-check-error";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type {
   BrowserReleaseTypes,
   CamoufoxConfig,
   CamoufoxOS,
+  ProxyCheckResult,
+  ProxyParseResult,
+  ProxyProtocolBenchmark,
+  StoredProxy,
   WayfernConfig,
   WayfernOS,
 } from "@/types";
@@ -49,6 +52,20 @@ const getCurrentOS = (): CamoufoxOS => {
   if (platform.includes("mac")) return "macos";
   return "linux";
 };
+
+const getDefaultCamoufoxScreenConfig = () => {
+  // Usability-first: don't force screen constraints by default.
+  return {};
+};
+
+const createDefaultCamoufoxConfig = (): CamoufoxConfig => ({
+  geoip: true,
+  os: getCurrentOS(),
+  ...getDefaultCamoufoxScreenConfig(),
+});
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 import { RippleButton } from "./ui/ripple";
 
@@ -76,6 +93,7 @@ interface CreateProfileDialogProps {
     groupId?: string;
     extensionGroupId?: string;
     ephemeral?: boolean;
+    launchAfterCreate?: boolean;
   }) => Promise<void>;
   selectedGroupId?: string;
   crossOsUnlocked?: boolean;
@@ -84,6 +102,23 @@ interface CreateProfileDialogProps {
 interface BrowserOption {
   value: BrowserTypeString;
   label: string;
+}
+
+interface ProxyFormState {
+  quickInput: string;
+  proxy_type: "http" | "https" | "socks4" | "socks5";
+  host: string;
+  port: string;
+  username: string;
+  password: string;
+}
+
+interface DraftProxySettings {
+  proxy_type: "http" | "https" | "socks4" | "socks5";
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
 }
 
 const browserOptions: BrowserOption[] = [
@@ -122,17 +157,45 @@ export function CreateProfileDialog({
     "browser-selection" | "browser-config"
   >("browser-selection");
   const [activeTab, setActiveTab] = useState("anti-detect");
+  const [configSection, setConfigSection] = useState<
+    "basic" | "proxy" | "advanced"
+  >("basic");
 
   // Browser selection states
   const [selectedBrowser, setSelectedBrowser] =
     useState<BrowserTypeString | null>(null);
-  const [selectedProxyId, setSelectedProxyId] = useState<string>();
+  const [proxyForm, setProxyForm] = useState<ProxyFormState>({
+    quickInput: "",
+    proxy_type: "http",
+    host: "",
+    port: "",
+    username: "",
+    password: "",
+  });
+  const [isProxyParsing, setIsProxyParsing] = useState(false);
+  const [isProxyChecking, setIsProxyChecking] = useState(false);
+  const [proxyCheckResult, setProxyCheckResult] =
+    useState<ProxyCheckResult | null>(null);
+  const [proxyCheckFailure, setProxyCheckFailure] =
+    useState<ProxyCheckFailureMeta | null>(null);
+  const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
+  const [proxyInUseBySyncedProfile, setProxyInUseBySyncedProfile] = useState<
+    Record<string, boolean>
+  >({});
+  const [proxyInputMode, setProxyInputMode] = useState<"quick" | "existing">(
+    "quick",
+  );
+  const [proxySearchQuery, setProxySearchQuery] = useState("");
+  const [proxyUsageFilter, setProxyUsageFilter] = useState<
+    "all" | "used" | "unused"
+  >("all");
+  const [selectedExistingProxyId, setSelectedExistingProxyId] =
+    useState("none");
 
   // Camoufox anti-detect states
-  const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>(() => ({
-    geoip: true, // Default to automatic geoip
-    os: getCurrentOS(), // Default to current OS
-  }));
+  const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>(
+    createDefaultCamoufoxConfig,
+  );
 
   // Wayfern anti-detect states
   const [wayfernConfig, setWayfernConfig] = useState<WayfernConfig>(() => ({
@@ -142,6 +205,7 @@ export function CreateProfileDialog({
   // Handle browser selection from the initial screen
   const handleBrowserSelect = (browser: BrowserTypeString) => {
     setSelectedBrowser(browser);
+    setConfigSection("basic");
     setCurrentStep("browser-config");
   };
 
@@ -150,7 +214,21 @@ export function CreateProfileDialog({
     setCurrentStep("browser-selection");
     setSelectedBrowser(null);
     setProfileName("");
-    setSelectedProxyId(undefined);
+    setProxyForm({
+      quickInput: "",
+      proxy_type: "http",
+      host: "",
+      port: "",
+      username: "",
+      password: "",
+    });
+    setProxyInputMode("quick");
+    setProxySearchQuery("");
+    setProxyUsageFilter("all");
+    setSelectedExistingProxyId("none");
+    setProxyCheckResult(null);
+    setProxyCheckFailure(null);
+    setConfigSection("basic");
   };
 
   const handleTabChange = (value: string) => {
@@ -158,15 +236,27 @@ export function CreateProfileDialog({
     setCurrentStep("browser-selection");
     setSelectedBrowser(null);
     setProfileName("");
-    setSelectedProxyId(undefined);
+    setProxyForm({
+      quickInput: "",
+      proxy_type: "http",
+      host: "",
+      port: "",
+      username: "",
+      password: "",
+    });
+    setProxyInputMode("quick");
+    setProxySearchQuery("");
+    setProxyUsageFilter("all");
+    setSelectedExistingProxyId("none");
+    setProxyCheckResult(null);
+    setProxyCheckFailure(null);
+    setConfigSection("basic");
   };
 
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
-  const { storedProxies } = useProxyEvents();
-  const { vpnConfigs } = useVpnEvents();
-  const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [ephemeral, setEphemeral] = useState(false);
+  const [launchAfterCreate, setLaunchAfterCreate] = useState(false);
   const [selectedExtensionGroupId, setSelectedExtensionGroupId] =
     useState<string>();
   const [extensionGroups, setExtensionGroups] = useState<
@@ -180,6 +270,38 @@ export function CreateProfileDialog({
       )
         .then(setExtensionGroups)
         .catch(() => setExtensionGroups([]));
+      void (async () => {
+        try {
+          const proxies = await invoke<StoredProxy[]>("get_stored_proxies");
+          const sortedProxies = [...proxies].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          );
+          setStoredProxies(sortedProxies);
+
+          const usageEntries = await Promise.all(
+            sortedProxies.map(async (proxy) => {
+              try {
+                const inUse = await invoke<boolean>(
+                  "is_proxy_in_use_by_synced_profile",
+                  {
+                    proxyId: proxy.id,
+                  },
+                );
+                return [proxy.id, inUse] as const;
+              } catch {
+                return [proxy.id, false] as const;
+              }
+            }),
+          );
+
+          setProxyInUseBySyncedProfile(
+            Object.fromEntries(usageEntries) as Record<string, boolean>,
+          );
+        } catch {
+          setStoredProxies([]);
+          setProxyInUseBySyncedProfile({});
+        }
+      })();
     }
   }, [isOpen]);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
@@ -390,16 +512,336 @@ export function CreateProfileDialog({
     }
   };
 
+  const isProxyConfigured = useMemo(() => {
+    return proxyForm.host.trim().length > 0 || proxyForm.port.trim().length > 0;
+  }, [proxyForm.host, proxyForm.port]);
+
+  const parsedProxyPort = useMemo(() => {
+    return Number.parseInt(proxyForm.port, 10);
+  }, [proxyForm.port]);
+
+  const isProxyManualValid = useMemo(() => {
+    return (
+      proxyForm.host.trim().length > 0 &&
+      Number.isFinite(parsedProxyPort) &&
+      parsedProxyPort > 0 &&
+      parsedProxyPort <= 65535
+    );
+  }, [parsedProxyPort, proxyForm.host]);
+
+  const buildProxySettings = useCallback((): DraftProxySettings | null => {
+    if (!isProxyManualValid) {
+      return null;
+    }
+
+    return {
+      proxy_type: proxyForm.proxy_type,
+      host: proxyForm.host.trim(),
+      port: parsedProxyPort,
+      username: proxyForm.username.trim() || undefined,
+      password: proxyForm.password.trim() || undefined,
+    };
+  }, [
+    isProxyManualValid,
+    parsedProxyPort,
+    proxyForm.host,
+    proxyForm.password,
+    proxyForm.proxy_type,
+    proxyForm.username,
+  ]);
+
+  const runProxyCheck = useCallback(
+    async (
+      proxyId: string,
+      proxySettings: DraftProxySettings,
+      options?: {
+        silent?: boolean;
+        maxAttempts?: number;
+      },
+    ): Promise<ProxyCheckResult | null> => {
+      setIsProxyChecking(true);
+      const silent = options?.silent ?? false;
+      const maxAttempts = Math.max(1, options?.maxAttempts ?? 2);
+      let lastFailure: ProxyCheckFailureMeta | null = null;
+
+      try {
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          try {
+            const result = await invoke<ProxyCheckResult>(
+              "check_proxy_validity",
+              {
+                proxyId,
+                proxySettings,
+              },
+            );
+            setProxyCheckResult(result);
+            setProxyCheckFailure(null);
+            if (!silent) {
+              showSuccessToast(
+                t("proxies.check.messages.location", {
+                  location:
+                    [result.city, result.country].filter(Boolean).join(", ") ||
+                    t("proxies.check.unknownLocation"),
+                }),
+              );
+            }
+            return result;
+          } catch (error) {
+            const failure = classifyProxyCheckError(error);
+            lastFailure = failure;
+            const normalizedMessage = failure.message.toLowerCase();
+            const shouldRetry =
+              attempt < maxAttempts - 1 &&
+              failure.retryable &&
+              (failure.category === "timeout" ||
+                normalizedMessage.includes(
+                  "proxy worker failed to start in time",
+                ));
+
+            if (shouldRetry) {
+              await sleep(350);
+            }
+          }
+        }
+
+        const failedResult: ProxyCheckResult = {
+          ip: "",
+          city: undefined,
+          country: undefined,
+          country_code: undefined,
+          timestamp: Math.floor(Date.now() / 1000),
+          is_valid: false,
+        };
+        setProxyCheckResult(failedResult);
+        setProxyCheckFailure(lastFailure);
+        if (!silent) {
+          showErrorToast(t("proxies.check.messages.failed"), {
+            description: t(
+              `proxies.check.failures.${lastFailure?.category ?? "unknown"}`,
+            ),
+          });
+        }
+        return null;
+      } finally {
+        setIsProxyChecking(false);
+      }
+    },
+    [t],
+  );
+
+  const resolveBestQuickProtocol = useCallback(
+    async (
+      fallbackProtocol: ProxyFormState["proxy_type"],
+      host: string,
+      port: number,
+      username?: string,
+      password?: string,
+    ): Promise<ProxyFormState["proxy_type"]> => {
+      try {
+        const benchmark = await Promise.race([
+          invoke<ProxyProtocolBenchmark>("benchmark_proxy_protocols", {
+            host,
+            port,
+            username: username ?? null,
+            password: password ?? null,
+          }),
+          sleep(1200).then(() => null),
+        ]);
+        if (!benchmark) {
+          return fallbackProtocol;
+        }
+        const protocol = benchmark.best_protocol as
+          | ProxyFormState["proxy_type"]
+          | undefined;
+        if (protocol) {
+          return protocol;
+        }
+      } catch {
+        // Keep fallback protocol when benchmark is unavailable.
+      }
+      return fallbackProtocol;
+    },
+    [],
+  );
+
+  const handleProxyQuickParse = useCallback(async () => {
+    const content = proxyForm.quickInput.trim();
+    if (!content) {
+      showErrorToast(t("proxies.form.quickAdd.validation.empty"));
+      return;
+    }
+
+    setIsProxyParsing(true);
+    try {
+      const results = await invoke<ProxyParseResult[]>("parse_txt_proxies", {
+        content,
+      });
+      const parsed = results.find(
+        (result): result is Extract<ProxyParseResult, { status: "parsed" }> =>
+          result.status === "parsed",
+      );
+
+      if (!parsed) {
+        showErrorToast(
+          t("proxies.form.quickAdd.validation.noValid", { count: 1 }),
+        );
+        return;
+      }
+
+      const parsedType =
+        (parsed.proxy_type as ProxyFormState["proxy_type"]) || "http";
+
+      setProxyForm((prev) => ({
+        ...prev,
+        proxy_type: parsedType,
+        host: parsed.host,
+        port: String(parsed.port),
+        username: parsed.username ?? "",
+        password: parsed.password ?? "",
+      }));
+      setSelectedExistingProxyId("none");
+      setProxyCheckResult(null);
+      setProxyCheckFailure(null);
+      showSuccessToast(t("proxies.form.quickAdd.parseSuccess"));
+
+      void (async () => {
+        const bestProtocol = await resolveBestQuickProtocol(
+          parsedType,
+          parsed.host,
+          parsed.port,
+          parsed.username ?? undefined,
+          parsed.password ?? undefined,
+        );
+        setProxyForm((prev) => ({
+          ...prev,
+          proxy_type: bestProtocol,
+        }));
+        await runProxyCheck(
+          `draft-${bestProtocol}-${Date.now()}`,
+          {
+            proxy_type: bestProtocol,
+            host: parsed.host,
+            port: parsed.port,
+            username: parsed.username ?? undefined,
+            password: parsed.password ?? undefined,
+          },
+          {
+            silent: true,
+            maxAttempts: 1,
+          },
+        );
+      })();
+    } catch {
+      showErrorToast(t("proxies.form.quickAdd.parseFailed"));
+    } finally {
+      setIsProxyParsing(false);
+    }
+  }, [proxyForm.quickInput, resolveBestQuickProtocol, runProxyCheck, t]);
+
+  useEffect(() => {
+    if (
+      !isOpen ||
+      proxyInputMode !== "existing" ||
+      selectedExistingProxyId === "none"
+    ) {
+      return;
+    }
+
+    const selectedProxy = storedProxies.find(
+      (proxy) => proxy.id === selectedExistingProxyId,
+    );
+    if (!selectedProxy) {
+      return;
+    }
+
+    const proxySettings = selectedProxy.proxy_settings;
+    const draftSettings: DraftProxySettings = {
+      proxy_type: proxySettings.proxy_type as ProxyFormState["proxy_type"],
+      host: proxySettings.host,
+      port: proxySettings.port,
+      username: proxySettings.username ?? undefined,
+      password: proxySettings.password ?? undefined,
+    };
+
+    setProxyCheckResult(null);
+    setProxyCheckFailure(null);
+    void runProxyCheck(`stored-${selectedProxy.id}`, draftSettings, {
+      silent: true,
+    });
+  }, [
+    isOpen,
+    proxyInputMode,
+    selectedExistingProxyId,
+    storedProxies,
+    runProxyCheck,
+  ]);
+
+  const handleProxyCheck = useCallback(async () => {
+    setSelectedExistingProxyId("none");
+    const proxySettings = buildProxySettings();
+    if (!proxySettings) {
+      showErrorToast(t("proxies.form.validation.hostPortRequired"));
+      return;
+    }
+
+    await runProxyCheck(`draft-${Date.now()}`, proxySettings);
+  }, [buildProxySettings, runProxyCheck, t]);
+
+  const createDraftProxyIfNeeded = useCallback(async (): Promise<
+    string | undefined
+  > => {
+    if (proxyInputMode === "existing" && selectedExistingProxyId !== "none") {
+      return selectedExistingProxyId;
+    }
+
+    if (!isProxyConfigured) {
+      return undefined;
+    }
+
+    const proxySettings = buildProxySettings();
+    if (!proxySettings) {
+      throw new Error(t("proxies.form.validation.hostPortRequired"));
+    }
+
+    const baseName = `${profileName.trim()} Proxy`;
+    const candidateNames = [
+      baseName,
+      `${baseName} 2`,
+      `${baseName} 3`,
+      `${baseName} ${Date.now()}`,
+    ];
+
+    for (const name of candidateNames) {
+      try {
+        const created = await invoke<StoredProxy>("create_stored_proxy", {
+          name,
+          proxySettings,
+        });
+        return created.id;
+      } catch (error) {
+        if (!String(error).includes("already exists")) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Failed to generate unique proxy name");
+  }, [
+    buildProxySettings,
+    isProxyConfigured,
+    profileName,
+    proxyInputMode,
+    selectedExistingProxyId,
+    t,
+  ]);
+
   const handleCreate = async () => {
     if (!profileName.trim()) return;
 
     setIsCreating(true);
-
-    const isVpnSelection = selectedProxyId?.startsWith("vpn-") ?? false;
-    const resolvedProxyId = isVpnSelection ? undefined : selectedProxyId;
-    const resolvedVpnId =
-      isVpnSelection && selectedProxyId ? selectedProxyId.slice(4) : undefined;
     try {
+      const resolvedProxyId = await createDraftProxyIfNeeded();
+
       if (activeTab === "anti-detect") {
         // Anti-detect browser - check if Wayfern or Camoufox is selected
         if (selectedBrowser === "wayfern") {
@@ -418,12 +860,12 @@ export function CreateProfileDialog({
             version: bestWayfernVersion.version,
             releaseType: bestWayfernVersion.releaseType,
             proxyId: resolvedProxyId,
-            vpnId: resolvedVpnId,
             wayfernConfig: finalWayfernConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
+            launchAfterCreate,
           });
         } else {
           // Default to Camoufox
@@ -443,12 +885,12 @@ export function CreateProfileDialog({
             version: bestCamoufoxVersion.version,
             releaseType: bestCamoufoxVersion.releaseType,
             proxyId: resolvedProxyId,
-            vpnId: resolvedVpnId,
             camoufoxConfig: finalCamoufoxConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
+            launchAfterCreate,
           });
         }
       } else {
@@ -470,8 +912,9 @@ export function CreateProfileDialog({
           browserStr: selectedBrowser,
           version: bestVersion.version,
           releaseType: bestVersion.releaseType,
-          proxyId: selectedProxyId,
+          proxyId: resolvedProxyId,
           groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
+          launchAfterCreate,
         });
       }
 
@@ -492,18 +935,32 @@ export function CreateProfileDialog({
     setCurrentStep("browser-selection");
     setActiveTab("anti-detect");
     setSelectedBrowser(null);
-    setSelectedProxyId(undefined);
+    setProxyForm({
+      quickInput: "",
+      proxy_type: "http",
+      host: "",
+      port: "",
+      username: "",
+      password: "",
+    });
+    setProxyInputMode("quick");
+    setProxySearchQuery("");
+    setProxyUsageFilter("all");
+    setSelectedExistingProxyId("none");
+    setIsProxyParsing(false);
+    setIsProxyChecking(false);
+    setProxyCheckResult(null);
+    setProxyCheckFailure(null);
     setReleaseTypes({});
     setIsLoadingReleaseTypes(false);
     setReleaseTypesError(null);
-    setCamoufoxConfig({
-      geoip: true, // Reset to automatic geoip
-      os: getCurrentOS(), // Reset to current OS
-    });
+    setCamoufoxConfig(createDefaultCamoufoxConfig());
     setWayfernConfig({
       os: getCurrentOS() as WayfernOS, // Reset to current OS
     });
     setEphemeral(false);
+    setLaunchAfterCreate(false);
+    setConfigSection("basic");
     onClose();
   };
 
@@ -551,10 +1008,569 @@ export function CreateProfileDialog({
     supportedBrowsers.includes(browser.value),
   );
 
+  const basicOsOptions: CamoufoxOS[] = ["windows", "macos", "linux"];
+
+  const selectedBasicOs = useMemo<CamoufoxOS>(() => {
+    if (selectedBrowser === "wayfern") {
+      const os = wayfernConfig.os;
+      if (os === "windows" || os === "macos" || os === "linux") {
+        return os;
+      }
+    }
+    if (selectedBrowser === "camoufox") {
+      const os = camoufoxConfig.os;
+      if (os === "windows" || os === "macos" || os === "linux") {
+        return os;
+      }
+    }
+    return getCurrentOS();
+  }, [camoufoxConfig.os, selectedBrowser, wayfernConfig.os]);
+
+  const showAntiDetectBasicFields =
+    activeTab === "anti-detect" &&
+    (selectedBrowser === "camoufox" || selectedBrowser === "wayfern");
+
+  const randomizeFingerprintOnLaunch =
+    selectedBrowser === "wayfern"
+      ? wayfernConfig.randomize_fingerprint_on_launch === true
+      : camoufoxConfig.randomize_fingerprint_on_launch === true;
+
+  const handleBasicOsChange = (os: CamoufoxOS) => {
+    if (selectedBrowser === "wayfern") {
+      updateWayfernConfig("os", os as WayfernOS);
+      return;
+    }
+    updateCamoufoxConfig("os", os);
+  };
+
+  const handleRandomizeFingerprintChange = (checked: boolean) => {
+    if (selectedBrowser === "wayfern") {
+      updateWayfernConfig("randomize_fingerprint_on_launch", checked);
+      return;
+    }
+    updateCamoufoxConfig("randomize_fingerprint_on_launch", checked);
+  };
+
+  const profileNameSection = (
+    <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+      <div className="space-y-2">
+        <Label htmlFor="profile-name">{t("createProfile.profileName")}</Label>
+        <Input
+          id="profile-name"
+          value={profileName}
+          onChange={(e) => setProfileName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isCreateDisabled && !isCreating) {
+              handleCreate();
+            }
+          }}
+          placeholder={t("createProfile.profileNamePlaceholder")}
+        />
+      </div>
+
+      {showAntiDetectBasicFields && (
+        <>
+          <div className="space-y-2">
+            <Label>{t("fingerprint.osLabel")}</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {basicOsOptions.map((os) => (
+                <Button
+                  key={os}
+                  type="button"
+                  size="sm"
+                  variant={selectedBasicOs === os ? "default" : "outline"}
+                  onClick={() => handleBasicOsChange(os)}
+                >
+                  {t(`fingerprint.os.${os}`)}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border bg-card p-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="randomize-fingerprint-basic"
+                checked={randomizeFingerprintOnLaunch}
+                onCheckedChange={(checked) =>
+                  handleRandomizeFingerprintChange(checked === true)
+                }
+              />
+              <Label
+                htmlFor="randomize-fingerprint-basic"
+                className="font-medium"
+              >
+                {t("fingerprint.generateRandomOnLaunch")}
+              </Label>
+            </div>
+            <p className="ml-6 text-sm text-muted-foreground">
+              {t("fingerprint.generateRandomDescription")}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const ephemeralSection = (
+    <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="ephemeral"
+          checked={ephemeral}
+          onCheckedChange={(checked) => setEphemeral(checked === true)}
+        />
+        <Label htmlFor="ephemeral" className="font-medium">
+          {t("profiles.ephemeral")}
+        </Label>
+        <span className="px-1 py-0.5 text-[10px] leading-none rounded bg-muted text-muted-foreground font-medium">
+          {t("profiles.ephemeralAlpha")}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground ml-6">
+        {t("profiles.ephemeralDescription")}
+      </p>
+    </div>
+  );
+
+  const extensionGroupSection =
+    extensionGroups.length > 0 ? (
+      <div className="space-y-2">
+        <Label>{t("extensions.extensionGroup")}</Label>
+        <Select
+          value={selectedExtensionGroupId || "none"}
+          onValueChange={(val) =>
+            setSelectedExtensionGroupId(val === "none" ? undefined : val)
+          }
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={t("profileInfo.values.none")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">{t("profileInfo.values.none")}</SelectItem>
+            {extensionGroups.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.name} ({g.extension_ids.length})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    ) : null;
+
+  const filteredStoredProxies = useMemo(() => {
+    const normalizedQuery = proxySearchQuery.trim().toLowerCase();
+
+    return storedProxies.filter((proxy) => {
+      const isUsed = proxyInUseBySyncedProfile[proxy.id] === true;
+      if (proxyUsageFilter === "used" && !isUsed) return false;
+      if (proxyUsageFilter === "unused" && isUsed) return false;
+
+      if (!normalizedQuery) return true;
+      const haystack = [
+        proxy.name,
+        proxy.proxy_settings.host,
+        String(proxy.proxy_settings.port),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+  }, [
+    proxyInUseBySyncedProfile,
+    proxySearchQuery,
+    proxyUsageFilter,
+    storedProxies,
+  ]);
+
+  const shouldShowProxyCheckCard = isProxyChecking || proxyCheckResult !== null;
+
+  const proxyComposerSection = (
+    <div className="space-y-2">
+      <Label>{t("createProfile.proxy.title")}</Label>
+
+      <div className="space-y-2 rounded-md border bg-card p-2.5">
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-1 rounded-md border bg-muted/20 p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={proxyInputMode === "quick" ? "default" : "ghost"}
+              className="h-8 text-xs"
+              onClick={() => {
+                setProxyInputMode("quick");
+              }}
+            >
+              {t("createProfile.proxy.modeQuick")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={proxyInputMode === "existing" ? "default" : "ghost"}
+              className="h-8 text-xs"
+              onClick={() => {
+                setProxyInputMode("existing");
+              }}
+            >
+              {t("createProfile.sections.proxy")}
+            </Button>
+          </div>
+          <p className="px-1 text-[11px] leading-tight text-muted-foreground">
+            {proxyInputMode === "quick"
+              ? t("createProfile.proxy.modeHint.quick")
+              : t("createProfile.proxy.modeHint.existing")}
+          </p>
+        </div>
+
+        {proxyInputMode === "existing" && (
+          <div className="space-y-1.5">
+            <Input
+              className="h-8 text-xs"
+              value={proxySearchQuery}
+              onChange={(e) => setProxySearchQuery(e.target.value)}
+              placeholder={t("createProfile.proxy.searchPlaceholder")}
+            />
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs"
+                variant={proxyUsageFilter === "all" ? "default" : "outline"}
+                onClick={() => setProxyUsageFilter("all")}
+              >
+                {t("createProfile.proxy.filterAll")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs"
+                variant={proxyUsageFilter === "used" ? "default" : "outline"}
+                onClick={() => setProxyUsageFilter("used")}
+              >
+                {t("createProfile.proxy.filterUsed")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs"
+                variant={proxyUsageFilter === "unused" ? "default" : "outline"}
+                onClick={() => setProxyUsageFilter("unused")}
+              >
+                {t("createProfile.proxy.filterUnused")}
+              </Button>
+            </div>
+
+            <ScrollArea className="h-36 rounded-md border bg-muted/20">
+              <div className="space-y-1 p-2">
+                <Button
+                  type="button"
+                  variant={
+                    selectedExistingProxyId === "none" ? "secondary" : "ghost"
+                  }
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setSelectedExistingProxyId("none");
+                    setProxyCheckResult(null);
+                    setProxyCheckFailure(null);
+                  }}
+                >
+                  {t("createProfile.proxy.noProxy")}
+                </Button>
+
+                {filteredStoredProxies.map((proxy) => {
+                  const isUsed = proxyInUseBySyncedProfile[proxy.id] === true;
+                  return (
+                    <Button
+                      key={proxy.id}
+                      type="button"
+                      variant={
+                        selectedExistingProxyId === proxy.id
+                          ? "secondary"
+                          : "ghost"
+                      }
+                      className="h-auto w-full justify-between px-3 py-2"
+                      onClick={() => {
+                        setSelectedExistingProxyId(proxy.id);
+                        setProxyForm((prev) => ({
+                          ...prev,
+                          proxy_type:
+                            (proxy.proxy_settings
+                              .proxy_type as ProxyFormState["proxy_type"]) ||
+                            prev.proxy_type,
+                          host: proxy.proxy_settings.host,
+                          port: String(proxy.proxy_settings.port),
+                          username: proxy.proxy_settings.username ?? "",
+                          password: proxy.proxy_settings.password ?? "",
+                        }));
+                        setProxyCheckResult(null);
+                        setProxyCheckFailure(null);
+                      }}
+                    >
+                      <div className="text-left">
+                        <p className="text-xs font-medium">{proxy.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {proxy.proxy_settings.host}:
+                          {proxy.proxy_settings.port}
+                        </p>
+                      </div>
+                      <span className="rounded-md border bg-card px-2 py-0.5 text-xs text-muted-foreground">
+                        {isUsed
+                          ? t("createProfile.proxy.statusUsed")
+                          : t("createProfile.proxy.statusUnused")}
+                      </span>
+                    </Button>
+                  );
+                })}
+
+                {filteredStoredProxies.length === 0 && (
+                  <p className="px-2 py-3 text-sm text-muted-foreground">
+                    {t("createProfile.proxy.emptyFiltered")}
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {proxyInputMode === "quick" && (
+          <div className="space-y-1.5">
+            <Label htmlFor="proxy-quick-input">
+              {t("proxies.form.quickAdd.label")}
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                className="h-8 text-xs"
+                id="proxy-quick-input"
+                value={proxyForm.quickInput}
+                onChange={(e) =>
+                  setProxyForm((prev) => ({
+                    ...prev,
+                    quickInput: e.target.value,
+                  }))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && proxyForm.quickInput.trim()) {
+                    e.preventDefault();
+                    void handleProxyQuickParse();
+                  }
+                }}
+                placeholder={t("proxies.form.quickAdd.singlePlaceholder")}
+              />
+              <LoadingButton
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-xs"
+                isLoading={isProxyParsing}
+                onClick={handleProxyQuickParse}
+                disabled={!proxyForm.quickInput.trim()}
+              >
+                {t("proxies.form.quickAdd.parse")}
+              </LoadingButton>
+            </div>
+          </div>
+        )}
+
+        {proxyInputMode === "quick" && (
+          <div className="space-y-2 rounded-md border bg-muted/20 p-2.5">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("proxies.form.type")}</Label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(["http", "https", "socks5", "socks4"] as const).map(
+                  (protocol) => (
+                    <Button
+                      key={protocol}
+                      type="button"
+                      variant={
+                        proxyForm.proxy_type === protocol
+                          ? "default"
+                          : "outline"
+                      }
+                      className="h-8 w-full text-xs"
+                      onClick={() => {
+                        setSelectedExistingProxyId("none");
+                        setProxyForm((prev) => ({
+                          ...prev,
+                          proxy_type: protocol,
+                        }));
+                      }}
+                    >
+                      {t(`proxies.types.${protocol}`)}
+                    </Button>
+                  ),
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs" htmlFor="proxy-host">
+                  {t("proxies.form.host")}
+                </Label>
+                <Input
+                  className="h-8 text-xs"
+                  id="proxy-host"
+                  value={proxyForm.host}
+                  onChange={(e) => {
+                    setSelectedExistingProxyId("none");
+                    setProxyForm((prev) => ({ ...prev, host: e.target.value }));
+                  }}
+                  placeholder={t("proxies.form.hostPlaceholder")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="proxy-port">
+                  {t("proxies.form.port")}
+                </Label>
+                <Input
+                  className="h-8 text-xs"
+                  id="proxy-port"
+                  inputMode="numeric"
+                  value={proxyForm.port}
+                  onChange={(e) => {
+                    setSelectedExistingProxyId("none");
+                    setProxyForm((prev) => ({ ...prev, port: e.target.value }));
+                  }}
+                  placeholder={t("proxies.form.portPlaceholder")}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="proxy-username">
+                  {t("proxies.form.username")}
+                </Label>
+                <Input
+                  className="h-8 text-xs"
+                  id="proxy-username"
+                  value={proxyForm.username}
+                  onChange={(e) => {
+                    setSelectedExistingProxyId("none");
+                    setProxyForm((prev) => ({
+                      ...prev,
+                      username: e.target.value,
+                    }));
+                  }}
+                  placeholder={t("proxies.form.usernamePlaceholder")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="proxy-password">
+                  {t("proxies.form.password")}
+                </Label>
+                <Input
+                  className="h-8 text-xs"
+                  id="proxy-password"
+                  type="password"
+                  value={proxyForm.password}
+                  onChange={(e) => {
+                    setSelectedExistingProxyId("none");
+                    setProxyForm((prev) => ({
+                      ...prev,
+                      password: e.target.value,
+                    }));
+                  }}
+                  placeholder={t("proxies.form.passwordPlaceholder")}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <p className="text-[11px] leading-tight text-muted-foreground">
+                {t("createProfile.proxy.autoSaveHint")}
+              </p>
+              <LoadingButton
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 px-3 text-xs"
+                isLoading={isProxyChecking}
+                disabled={!isProxyManualValid}
+                onClick={handleProxyCheck}
+              >
+                {t("createProfile.proxy.check")}
+              </LoadingButton>
+            </div>
+          </div>
+        )}
+
+        {shouldShowProxyCheckCard && (
+          <div className="space-y-1.5 rounded-md border bg-muted/40 p-2.5 text-xs">
+            {isProxyChecking && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <div className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin" />
+                <p>{t("proxies.check.tooltips.checking")}</p>
+              </div>
+            )}
+
+            {!isProxyChecking && proxyCheckResult?.is_valid && (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">
+                    {proxyCheckResult.ip}{" "}
+                    <span className="text-muted-foreground">
+                      {proxyCheckResult.country
+                        ? `• ${proxyCheckResult.country}`
+                        : ""}
+                    </span>
+                  </p>
+                  {proxyCheckResult.mobile && (
+                    <span className="rounded-md border bg-card px-2 py-0.5 text-xs text-muted-foreground">
+                      MOBILE
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-muted-foreground">
+                  <p>
+                    {t("proxies.check.details.location")}:{" "}
+                    {[proxyCheckResult.city, proxyCheckResult.country]
+                      .filter(Boolean)
+                      .join(", ") || t("proxies.check.unknownLocation")}
+                  </p>
+                  <p>
+                    {t("proxies.check.details.timezone")}:{" "}
+                    {proxyCheckResult.timezone || "-"}
+                  </p>
+                  <p>
+                    {t("proxies.check.details.isp")}:{" "}
+                    {proxyCheckResult.isp || "-"}
+                  </p>
+                  <p>
+                    {t("proxies.check.details.asn")}:{" "}
+                    {proxyCheckResult.asn || "-"}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {!isProxyChecking &&
+              proxyCheckResult &&
+              !proxyCheckResult.is_valid && (
+                <div className="space-y-1 text-muted-foreground">
+                  <p className="font-medium text-foreground">
+                    {t("proxies.check.messages.failed")}
+                  </p>
+                  <p>
+                    {t(
+                      `proxies.check.failures.${proxyCheckFailure?.category ?? "unknown"}`,
+                    )}
+                  </p>
+                  <p>{t("proxies.check.tooltips.retryHint")}</p>
+                </div>
+              )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-full max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="my-8 max-h-[90vh] flex w-full max-w-3xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 px-6 pt-6">
           <DialogTitle>
             {currentStep === "browser-selection"
               ? "Create New Profile"
@@ -565,169 +1581,164 @@ export function CreateProfileDialog({
         <Tabs
           value={activeTab}
           onValueChange={handleTabChange}
-          className="flex flex-col flex-1 w-full min-h-0"
+          className="flex min-h-0 w-full flex-1 flex-col"
         >
           {/* Tab list hidden - only anti-detect browsers are supported */}
 
-          <ScrollArea className="overflow-y-auto flex-1">
-            <div className="flex flex-col justify-center items-center w-full">
-              <div className="py-4 space-y-6 w-full max-w-md">
-                {currentStep === "browser-selection" ? (
-                  <>
-                    <TabsContent value="anti-detect" className="mt-0 space-y-6">
-                      {/* Anti-Detect Browser Selection */}
-                      <div className="space-y-6">
-                        <div className="text-center">
-                          <h3 className="text-lg font-medium">
-                            Anti-Detect Browser
-                          </h3>
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Choose a browser with anti-detection capabilities
-                          </p>
-                        </div>
-
-                        <div className="space-y-3">
-                          {/* Wayfern (Chromium) - First */}
-                          <Button
-                            onClick={() => handleBrowserSelect("wayfern")}
-                            className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
-                            variant="outline"
-                          >
-                            <div className="flex justify-center items-center w-8 h-8">
-                              {(() => {
-                                const IconComponent = getBrowserIcon("wayfern");
-                                return IconComponent ? (
-                                  <IconComponent className="w-6 h-6" />
-                                ) : null;
-                              })()}
-                            </div>
-                            <div className="text-left">
-                              <div className="font-medium">Wayfern</div>
-                              <div className="text-sm text-muted-foreground">
-                                Anti-Detect Browser
-                              </div>
-                            </div>
-                          </Button>
-
-                          {/* Camoufox (Firefox) - Second */}
-                          <Button
-                            onClick={() => handleBrowserSelect("camoufox")}
-                            className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
-                            variant="outline"
-                          >
-                            <div className="flex justify-center items-center w-8 h-8">
-                              {(() => {
-                                const IconComponent =
-                                  getBrowserIcon("camoufox");
-                                return IconComponent ? (
-                                  <IconComponent className="w-6 h-6" />
-                                ) : null;
-                              })()}
-                            </div>
-                            <div className="text-left">
-                              <div className="font-medium">Camoufox</div>
-                              <div className="text-sm text-muted-foreground">
-                                Anti-Detect Browser
-                              </div>
-                            </div>
-                          </Button>
-                        </div>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="mx-auto w-full max-w-3xl space-y-6 px-6 py-4">
+              {currentStep === "browser-config" && (
+                <div className="space-y-2">
+                  <Tabs
+                    value={configSection}
+                    onValueChange={(value) =>
+                      setConfigSection(value as "basic" | "proxy" | "advanced")
+                    }
+                    className="w-full"
+                  >
+                    <TabsList className="grid h-auto w-full grid-cols-3 rounded-none border-b bg-transparent p-0">
+                      <TabsTrigger
+                        value="basic"
+                        className="rounded-none border-b-2 border-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                      >
+                        {t("createProfile.sections.basic")}
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="proxy"
+                        className="rounded-none border-b-2 border-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                      >
+                        {t("createProfile.sections.proxy")}
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="advanced"
+                        className="rounded-none border-b-2 border-transparent px-3 py-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                      >
+                        {t("createProfile.sections.advanced")}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  <p className="px-1 text-xs text-muted-foreground">
+                    {t(`createProfile.sections.${configSection}Hint`)}
+                  </p>
+                </div>
+              )}
+              {currentStep === "browser-selection" ? (
+                <>
+                  <TabsContent value="anti-detect" className="mt-0 space-y-6">
+                    {/* Anti-Detect Browser Selection */}
+                    <div className="space-y-6">
+                      <div className="text-center">
+                        <h3 className="text-lg font-medium">
+                          Anti-Detect Browser
+                        </h3>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Choose a browser with anti-detection capabilities
+                        </p>
                       </div>
-                    </TabsContent>
 
-                    <TabsContent value="regular" className="mt-0 space-y-6">
-                      {/* Regular Browser Selection */}
-                      <div className="space-y-6">
-                        <div className="text-center">
-                          <h3 className="text-lg font-medium">
-                            Regular Browsers
-                          </h3>
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Choose from supported regular browsers
-                          </p>
-                        </div>
-
-                        <div className="space-y-3">
-                          {regularBrowsers.map((browser) => {
-                            if (browser.value === "camoufox") return null; // Skip camoufox as it's handled in anti-detect tab
-                            const IconComponent = getBrowserIcon(browser.value);
-                            return (
-                              <Button
-                                key={browser.value}
-                                onClick={() =>
-                                  handleBrowserSelect(browser.value)
-                                }
-                                className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
-                                variant="outline"
-                              >
-                                <div className="flex justify-center items-center w-8 h-8">
-                                  {IconComponent && (
-                                    <IconComponent className="w-6 h-6" />
-                                  )}
-                                </div>
-                                <div className="text-left">
-                                  <div className="font-medium">
-                                    {browser.label}
-                                  </div>
-                                  <div className="text-sm text-muted-foreground">
-                                    Regular Browser
-                                  </div>
-                                </div>
-                              </Button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </>
-                ) : (
-                  <>
-                    <TabsContent value="anti-detect" className="mt-0">
-                      {/* Anti-Detect Configuration */}
-                      <div className="space-y-6">
-                        {/* Profile Name */}
-                        <div className="space-y-2">
-                          <Label htmlFor="profile-name">Profile Name</Label>
-                          <Input
-                            id="profile-name"
-                            value={profileName}
-                            onChange={(e) => setProfileName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (
-                                e.key === "Enter" &&
-                                !isCreateDisabled &&
-                                !isCreating
-                              ) {
-                                handleCreate();
-                              }
-                            }}
-                            placeholder="Enter profile name"
-                          />
-                        </div>
-
-                        {/* Ephemeral Option */}
-                        <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                          <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id="ephemeral"
-                              checked={ephemeral}
-                              onCheckedChange={(checked) =>
-                                setEphemeral(checked === true)
-                              }
-                            />
-                            <Label htmlFor="ephemeral" className="font-medium">
-                              {t("profiles.ephemeral")}
-                            </Label>
-                            <span className="px-1 py-0.5 text-[10px] leading-none rounded bg-muted text-muted-foreground font-medium">
-                              {t("profiles.ephemeralAlpha")}
-                            </span>
+                      <div className="space-y-3">
+                        {/* Wayfern (Chromium) - First */}
+                        <Button
+                          onClick={() => handleBrowserSelect("wayfern")}
+                          className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                          variant="outline"
+                        >
+                          <div className="flex justify-center items-center w-8 h-8">
+                            {(() => {
+                              const IconComponent = getBrowserIcon("wayfern");
+                              return IconComponent ? (
+                                <IconComponent className="w-6 h-6" />
+                              ) : null;
+                            })()}
                           </div>
-                          <p className="text-sm text-muted-foreground ml-6">
-                            {t("profiles.ephemeralDescription")}
-                          </p>
-                        </div>
+                          <div className="text-left">
+                            <div className="font-medium">Wayfern</div>
+                            <div className="text-sm text-muted-foreground">
+                              Anti-Detect Browser
+                            </div>
+                          </div>
+                        </Button>
 
-                        {selectedBrowser === "wayfern" ? (
+                        {/* Camoufox (Firefox) - Second */}
+                        <Button
+                          onClick={() => handleBrowserSelect("camoufox")}
+                          className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                          variant="outline"
+                        >
+                          <div className="flex justify-center items-center w-8 h-8">
+                            {(() => {
+                              const IconComponent = getBrowserIcon("camoufox");
+                              return IconComponent ? (
+                                <IconComponent className="w-6 h-6" />
+                              ) : null;
+                            })()}
+                          </div>
+                          <div className="text-left">
+                            <div className="font-medium">Camoufox</div>
+                            <div className="text-sm text-muted-foreground">
+                              Anti-Detect Browser
+                            </div>
+                          </div>
+                        </Button>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="regular" className="mt-0 space-y-6">
+                    {/* Regular Browser Selection */}
+                    <div className="space-y-6">
+                      <div className="text-center">
+                        <h3 className="text-lg font-medium">
+                          Regular Browsers
+                        </h3>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Choose from supported regular browsers
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        {regularBrowsers.map((browser) => {
+                          if (browser.value === "camoufox") return null; // Skip camoufox as it's handled in anti-detect tab
+                          const IconComponent = getBrowserIcon(browser.value);
+                          return (
+                            <Button
+                              key={browser.value}
+                              onClick={() => handleBrowserSelect(browser.value)}
+                              className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                              variant="outline"
+                            >
+                              <div className="flex justify-center items-center w-8 h-8">
+                                {IconComponent && (
+                                  <IconComponent className="w-6 h-6" />
+                                )}
+                              </div>
+                              <div className="text-left">
+                                <div className="font-medium">
+                                  {browser.label}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  Regular Browser
+                                </div>
+                              </div>
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </TabsContent>
+                </>
+              ) : (
+                <>
+                  <TabsContent value="anti-detect" className="mt-0">
+                    {/* Anti-Detect Configuration */}
+                    <div className="space-y-6">
+                      {configSection === "basic" && profileNameSection}
+
+                      {/* Ephemeral Option */}
+                      {configSection === "advanced" && ephemeralSection}
+
+                      {configSection === "advanced" &&
+                        (selectedBrowser === "wayfern" ? (
                           // Wayfern Configuration
                           <div className="space-y-6">
                             {/* Wayfern Download Status */}
@@ -1023,133 +2034,21 @@ export function CreateProfileDialog({
                               </div>
                             )}
                           </div>
-                        )}
+                        ))}
 
-                        {/* Proxy / VPN Selection - Always visible */}
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <Label>Proxy / VPN</Label>
-                            <RippleButton
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setShowProxyForm(true)}
-                              className="px-2 h-7 text-xs"
-                            >
-                              <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
-                            </RippleButton>
-                          </div>
-                          {storedProxies.length > 0 || vpnConfigs.length > 0 ? (
-                            <Select
-                              value={selectedProxyId || "none"}
-                              onValueChange={(value) =>
-                                setSelectedProxyId(
-                                  value === "none" ? undefined : value,
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="No proxy / VPN" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">
-                                  No proxy / VPN
-                                </SelectItem>
-                                {storedProxies.length > 0 && (
-                                  <SelectGroup>
-                                    <SelectLabel>Proxies</SelectLabel>
-                                    {storedProxies.map((proxy) => (
-                                      <SelectItem
-                                        key={proxy.id}
-                                        value={proxy.id}
-                                      >
-                                        {proxy.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                )}
-                                {vpnConfigs.length > 0 && (
-                                  <SelectGroup>
-                                    <SelectLabel>VPNs</SelectLabel>
-                                    {vpnConfigs.map((vpn) => (
-                                      <SelectItem
-                                        key={vpn.id}
-                                        value={`vpn-${vpn.id}`}
-                                      >
-                                        {vpn.vpn_type === "WireGuard"
-                                          ? "WG"
-                                          : "OVPN"}{" "}
-                                        — {vpn.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                              No proxies or VPNs available. Add one to route
-                              this profile's traffic.
-                            </div>
-                          )}
-                        </div>
+                      {configSection === "proxy" && proxyComposerSection}
 
-                        {/* Extension Group */}
-                        {extensionGroups.length > 0 && (
-                          <div className="space-y-2">
-                            <Label>{t("extensions.extensionGroup")}</Label>
-                            <Select
-                              value={selectedExtensionGroupId || "none"}
-                              onValueChange={(val) =>
-                                setSelectedExtensionGroupId(
-                                  val === "none" ? undefined : val,
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue
-                                  placeholder={t("profileInfo.values.none")}
-                                />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">
-                                  {t("profileInfo.values.none")}
-                                </SelectItem>
-                                {extensionGroups.map((g) => (
-                                  <SelectItem key={g.id} value={g.id}>
-                                    {g.name} ({g.extension_ids.length})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </div>
-                    </TabsContent>
+                      {configSection === "advanced" && extensionGroupSection}
+                    </div>
+                  </TabsContent>
 
-                    <TabsContent value="regular" className="mt-0">
+                  <TabsContent value="regular" className="mt-0">
+                    {/* Regular Browser Configuration */}
+                    <div className="space-y-6">
+                      {configSection === "basic" && profileNameSection}
+
                       {/* Regular Browser Configuration */}
-                      <div className="space-y-6">
-                        {/* Profile Name */}
-                        <div className="space-y-2">
-                          <Label htmlFor="profile-name">Profile Name</Label>
-                          <Input
-                            id="profile-name"
-                            value={profileName}
-                            onChange={(e) => setProfileName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (
-                                e.key === "Enter" &&
-                                !isCreateDisabled &&
-                                !isCreating
-                              ) {
-                                handleCreate();
-                              }
-                            }}
-                            placeholder="Enter profile name"
-                          />
-                        </div>
-
-                        {/* Regular Browser Configuration */}
+                      {configSection === "basic" && (
                         <div className="space-y-4">
                           {selectedBrowser && (
                             <div className="space-y-3">
@@ -1242,108 +2141,52 @@ export function CreateProfileDialog({
                             </div>
                           )}
                         </div>
+                      )}
 
-                        {/* Proxy / VPN Selection - Always visible */}
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <Label>Proxy / VPN</Label>
-                            <RippleButton
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setShowProxyForm(true)}
-                              className="px-2 h-7 text-xs"
-                            >
-                              <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
-                            </RippleButton>
-                          </div>
-                          {storedProxies.length > 0 || vpnConfigs.length > 0 ? (
-                            <Select
-                              value={selectedProxyId || "none"}
-                              onValueChange={(value) =>
-                                setSelectedProxyId(
-                                  value === "none" ? undefined : value,
-                                )
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="No proxy / VPN" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">
-                                  No proxy / VPN
-                                </SelectItem>
-                                {storedProxies.length > 0 && (
-                                  <SelectGroup>
-                                    <SelectLabel>Proxies</SelectLabel>
-                                    {storedProxies.map((proxy) => (
-                                      <SelectItem
-                                        key={proxy.id}
-                                        value={proxy.id}
-                                      >
-                                        {proxy.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                )}
-                                {vpnConfigs.length > 0 && (
-                                  <SelectGroup>
-                                    <SelectLabel>VPNs</SelectLabel>
-                                    {vpnConfigs.map((vpn) => (
-                                      <SelectItem
-                                        key={vpn.id}
-                                        value={`vpn-${vpn.id}`}
-                                      >
-                                        {vpn.vpn_type === "WireGuard"
-                                          ? "WG"
-                                          : "OVPN"}{" "}
-                                        — {vpn.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectGroup>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                              No proxies or VPNs available. Add one to route
-                              this profile's traffic.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </>
-                )}
-              </div>
+                      {configSection === "proxy" && proxyComposerSection}
+                      {configSection === "advanced" && ephemeralSection}
+                      {configSection === "advanced" && extensionGroupSection}
+                    </div>
+                  </TabsContent>
+                </>
+              )}
             </div>
           </ScrollArea>
         </Tabs>
 
-        <DialogFooter className="flex-shrink-0 pt-4 border-t">
+        <DialogFooter className="shrink-0 border-t px-6 py-4">
           {currentStep === "browser-config" ? (
             <>
+              <div className="flex items-center gap-2 mr-auto">
+                <Checkbox
+                  id="launch-after-create"
+                  checked={launchAfterCreate}
+                  onCheckedChange={(checked) =>
+                    setLaunchAfterCreate(checked === true)
+                  }
+                />
+                <Label htmlFor="launch-after-create" className="text-sm">
+                  {t("createProfile.launchAfterCreate")}
+                </Label>
+              </div>
               <RippleButton variant="outline" onClick={handleBack}>
-                Back
+                {t("common.buttons.back")}
               </RippleButton>
               <LoadingButton
                 onClick={handleCreate}
                 isLoading={isCreating}
                 disabled={isCreateDisabled}
               >
-                Create
+                {t("common.buttons.create")}
               </LoadingButton>
             </>
           ) : (
             <RippleButton variant="outline" onClick={handleClose}>
-              Cancel
+              {t("common.buttons.cancel")}
             </RippleButton>
           )}
         </DialogFooter>
       </DialogContent>
-      <ProxyFormDialog
-        isOpen={showProxyForm}
-        onClose={() => setShowProxyForm(false)}
-      />
     </Dialog>
   );
 }
