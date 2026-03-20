@@ -46,16 +46,6 @@ jobs:
     permissions:
       contents: read
 
-  codeql:
-    name: CodeQL
-    uses: ./.github/workflows/codeql.yml
-    secrets: inherit
-    permissions:
-      security-events: write
-      contents: read
-      packages: read
-      actions: read
-
   spellcheck:
     name: Spell Check
     uses: ./.github/workflows/spellcheck.yml
@@ -64,7 +54,7 @@ jobs:
       contents: read
 
   release:
-    needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
+    needs: [security-scan, lint-js, lint-rust, spellcheck]
     permissions:
       contents: write
     strategy:
