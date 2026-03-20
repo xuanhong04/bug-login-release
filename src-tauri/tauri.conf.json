@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "node scripts/tauri-before-dev.mjs",
     "devUrl": "http://localhost:12341",
-    "beforeBuildCommand": "pnpm copy-proxy-binary && pnpm build",
+    "beforeBuildCommand": "pnpm copy-proxy-binary && (node -e \"if(process.env.CI) process.exit(0); else process.exit(1)\" || pnpm build)",
     "frontendDist": "../dist"
   },
   "app": {
@@ -57,7 +57,13 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "nsis": {
+        "allowDowngrades": true,
+        "oneClick": true,
+        "perMachine": false,
+        "customPath": "installer.nsh"
+      }
     }
   },
   "plugins": {

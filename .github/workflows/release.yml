@@ -103,6 +103,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET: ${{ matrix.target }}
+          PROFILE: release
         with:
           projectPath: ./src-tauri
           tagName: ${{ github.ref_name }}
