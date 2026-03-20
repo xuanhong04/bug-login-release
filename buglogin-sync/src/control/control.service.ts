@@ -2,8 +2,13 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
   AuditLogRecord,
@@ -27,8 +32,18 @@ type RequestActor = {
   platformRole: string | null;
 };
 
+interface PersistedControlState {
+  workspaces: WorkspaceRecord[];
+  memberships: MembershipRecord[];
+  entitlements: EntitlementRecord[];
+  invites: InviteRecord[];
+  shareGrants: ShareGrantRecord[];
+  coupons: CouponRecord[];
+  auditLogs: AuditLogRecord[];
+}
+
 @Injectable()
-export class ControlService {
+export class ControlService implements OnModuleInit {
   private readonly workspaces = new Map<string, WorkspaceRecord>();
   private readonly memberships = new Map<string, MembershipRecord[]>();
   private readonly entitlements = new Map<string, EntitlementRecord>();
@@ -36,6 +51,25 @@ export class ControlService {
   private readonly shareGrants = new Map<string, ShareGrantRecord>();
   private readonly coupons = new Map<string, CouponRecord>();
   private readonly auditLogs: AuditLogRecord[] = [];
+  private readonly stateFilePath: string | null;
+
+  constructor(@Optional() private readonly configService?: ConfigService) {
+    const defaultStatePath = resolve(process.cwd(), ".data", "control-state.json");
+    const configuredPath = this.configService
+      ?.get<string>("CONTROL_STATE_FILE")
+      ?.trim();
+
+    if (process.env.NODE_ENV === "test") {
+      this.stateFilePath = null;
+      return;
+    }
+
+    this.stateFilePath = configuredPath || defaultStatePath;
+  }
+
+  onModuleInit() {
+    this.loadStateFromDisk();
+  }
 
   createWorkspace(actor: RequestActor, name: string, mode: WorkspaceMode) {
     const normalizedName = this.normalizeWorkspaceName(name);
@@ -66,11 +100,18 @@ export class ControlService {
     });
 
     this.audit("workspace.created", actor.email, workspaceId, workspaceId);
+    this.persistStateToDisk();
 
     return workspace;
   }
 
   listWorkspaces(actor: RequestActor): WorkspaceRecord[] {
+    if (actor.platformRole === "platform_admin") {
+      return Array.from(this.workspaces.values()).sort((left, right) =>
+        right.createdAt.localeCompare(left.createdAt),
+      );
+    }
+
     const ownedMemberships = Array.from(this.memberships.values()).flat();
     const workspaceIds = new Set(
       ownedMemberships
@@ -84,6 +125,17 @@ export class ControlService {
   }
 
   getWorkspaceMembership(workspaceId: string, actor: RequestActor): MembershipRecord {
+    if (actor.platformRole === "platform_admin") {
+      this.assertWorkspaceExists(workspaceId);
+      return {
+        workspaceId,
+        userId: actor.userId,
+        email: actor.email,
+        role: "owner",
+        createdAt: new Date(0).toISOString(),
+      };
+    }
+
     const members = this.memberships.get(workspaceId) || [];
     const membership = members.find((item) => item.userId === actor.userId);
     if (!membership) {
@@ -135,6 +187,7 @@ export class ControlService {
       workspaceId,
       normalizedReason,
     );
+    this.persistStateToDisk();
     return next;
   }
 
@@ -186,6 +239,7 @@ export class ControlService {
 
     this.invites.set(invite.token, invite);
     this.audit("invite.created", actor.email, workspaceId, invite.id);
+    this.persistStateToDisk();
     return invite;
   }
 
@@ -224,6 +278,7 @@ export class ControlService {
     invite.consumedAt = new Date().toISOString();
     this.invites.set(invite.token, invite);
     this.audit("invite.revoked", actor.email, workspaceId, invite.id, normalizedReason);
+    this.persistStateToDisk();
     return invite;
   }
 
@@ -271,6 +326,7 @@ export class ControlService {
       targetUserId,
       normalizedReason,
     );
+    this.persistStateToDisk();
     return targetMembership;
   }
 
@@ -315,6 +371,7 @@ export class ControlService {
       targetUserId,
       normalizedReason,
     );
+    this.persistStateToDisk();
     return targetMembership;
   }
 
@@ -357,6 +414,7 @@ export class ControlService {
       invite.id,
       expired ? "expired_link_auto_accepted_for_exact_email" : undefined,
     );
+    this.persistStateToDisk();
 
     return (
       members.find((member) => member.userId === actor.userId) || {
@@ -418,6 +476,7 @@ export class ControlService {
 
     this.shareGrants.set(grant.id, grant);
     this.audit("share.created", actor.email, workspaceId, grant.id, normalizedReason);
+    this.persistStateToDisk();
     return grant;
   }
 
@@ -442,6 +501,7 @@ export class ControlService {
     }
     this.shareGrants.set(grant.id, grant);
     this.audit("share.revoked", actor.email, workspaceId, grant.id, normalizedReason);
+    this.persistStateToDisk();
     return grant;
   }
 
@@ -573,6 +633,7 @@ export class ControlService {
 
     this.coupons.set(coupon.id, coupon);
     this.audit("coupon.created", actor.email, undefined, coupon.id);
+    this.persistStateToDisk();
     return coupon;
   }
 
@@ -589,6 +650,7 @@ export class ControlService {
     }
     this.coupons.set(coupon.id, coupon);
     this.audit("coupon.revoked", actor.email, undefined, coupon.id, normalizedReason);
+    this.persistStateToDisk();
     return coupon;
   }
 
@@ -637,6 +699,7 @@ export class ControlService {
     bestCoupon.redeemedCount += 1;
     this.coupons.set(bestCoupon.id, bestCoupon);
     this.audit("coupon.applied", actor.email, workspaceId, bestCoupon.id);
+    this.persistStateToDisk();
 
     return {
       bestCoupon,
@@ -646,6 +709,9 @@ export class ControlService {
 
   private assertWorkspaceAccess(workspaceId: string, actor: RequestActor) {
     this.assertWorkspaceExists(workspaceId);
+    if (actor.platformRole === "platform_admin") {
+      return;
+    }
     this.getWorkspaceMembership(workspaceId, actor);
   }
 
@@ -692,6 +758,83 @@ export class ControlService {
   private countOwners(workspaceId: string): number {
     const members = this.memberships.get(workspaceId) || [];
     return members.filter((member) => member.role === "owner").length;
+  }
+
+  private loadStateFromDisk() {
+    if (!this.stateFilePath) {
+      return;
+    }
+
+    try {
+      const raw = readFileSync(this.stateFilePath, "utf-8");
+      const parsed = JSON.parse(raw) as PersistedControlState;
+
+      this.workspaces.clear();
+      this.memberships.clear();
+      this.entitlements.clear();
+      this.invites.clear();
+      this.shareGrants.clear();
+      this.coupons.clear();
+      this.auditLogs.splice(0, this.auditLogs.length);
+
+      for (const workspace of parsed.workspaces || []) {
+        this.workspaces.set(workspace.id, workspace);
+      }
+
+      for (const membership of parsed.memberships || []) {
+        const current = this.memberships.get(membership.workspaceId) || [];
+        current.push(membership);
+        this.memberships.set(membership.workspaceId, current);
+      }
+
+      for (const entitlement of parsed.entitlements || []) {
+        this.entitlements.set(entitlement.workspaceId, entitlement);
+      }
+
+      for (const invite of parsed.invites || []) {
+        this.invites.set(invite.token, invite);
+      }
+
+      for (const shareGrant of parsed.shareGrants || []) {
+        this.shareGrants.set(shareGrant.id, shareGrant);
+      }
+
+      for (const coupon of parsed.coupons || []) {
+        this.coupons.set(coupon.id, coupon);
+      }
+
+      for (const auditLog of parsed.auditLogs || []) {
+        this.auditLogs.push(auditLog);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return;
+      }
+      console.warn("[control-state] Failed to load persisted control-plane state:", error);
+    }
+  }
+
+  private persistStateToDisk() {
+    if (!this.stateFilePath) {
+      return;
+    }
+
+    const snapshot: PersistedControlState = {
+      workspaces: Array.from(this.workspaces.values()),
+      memberships: Array.from(this.memberships.values()).flat(),
+      entitlements: Array.from(this.entitlements.values()),
+      invites: Array.from(this.invites.values()),
+      shareGrants: Array.from(this.shareGrants.values()),
+      coupons: Array.from(this.coupons.values()),
+      auditLogs: [...this.auditLogs],
+    };
+
+    try {
+      mkdirSync(dirname(this.stateFilePath), { recursive: true });
+      writeFileSync(this.stateFilePath, JSON.stringify(snapshot, null, 2));
+    } catch (error) {
+      console.warn("[control-state] Failed to persist control-plane state:", error);
+    }
   }
 
   private normalizeEmail(email: string): string | null {

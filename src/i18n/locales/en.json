@@ -1147,10 +1147,23 @@
   "adminWorkspace": {
     "subtitle": "Platform governance for billing, entitlements, and operational controls.",
     "reasonRequired": "Reason is required for this action.",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "Explain why this operation is needed (required)",
     "noAccessTitle": "You do not have access to Admin Workspace",
     "noAccessDescription": "Only owner/admin roles or platform admins can access this management area.",
     "entitlementUpdated": "Entitlement state updated.",
     "entitlementUpdateFailed": "Failed to update entitlement state.",
+    "tabs": {
+      "workspace": "Workspace",
+      "billing": "Billing",
+      "audit": "Audit"
+    },
+    "metrics": {
+      "workspaces": "Workspaces",
+      "members": "Members",
+      "invites": "Open invites",
+      "audits24h": "Audit events (24h)"
+    },
     "overview": {
       "title": "Platform Overview",
       "description": "Keep core controls visible and enforce release-safe defaults for auth, billing, and sync.",
@@ -1170,6 +1183,7 @@
       "workspaceNameRequired": "Workspace name is required.",
       "workspaceCreated": "Workspace created.",
       "workspaceCreateFailed": "Failed to create workspace.",
+      "workspaceSelectRequired": "Please select a workspace first.",
       "workspaceNamePlaceholder": "Workspace name",
       "modeTeam": "Team",
       "modePersonal": "Personal",
@@ -1187,6 +1201,62 @@
       "noMembers": "No members yet.",
       "invites": "Invites",
       "noInvites": "No invites yet."
+    },
+    "members": {
+      "title": "Members",
+      "invites": "Invite management",
+      "inviteEmailRequired": "Invite email is required.",
+      "inviteEmailPlaceholder": "name@company.com",
+      "inviteCreated": "Invite created successfully.",
+      "inviteCreateFailed": "Failed to create invite.",
+      "inviteRevoked": "Invite revoked.",
+      "inviteRevokeFailed": "Failed to revoke invite.",
+      "inviteUsed": "accepted",
+      "invitePending": "pending",
+      "updateRole": "Update role",
+      "roleUpdated": "Role updated.",
+      "roleUpdateFailed": "Failed to update role.",
+      "removeMember": "Remove",
+      "memberRemoved": "Member removed.",
+      "memberRemoveFailed": "Failed to remove member.",
+      "revokeInvite": "Revoke invite"
+    },
+    "share": {
+      "title": "Share grants",
+      "fieldsRequired": "Resource and recipient email are required.",
+      "resourceIdPlaceholder": "Resource ID (profile/group)",
+      "recipientPlaceholder": "Recipient email",
+      "created": "Share grant created.",
+      "createFailed": "Failed to create share grant.",
+      "revoked": "Share grant revoked.",
+      "revokeFailed": "Failed to revoke share grant.",
+      "none": "No share grants yet.",
+      "activeStatus": "active",
+      "revokedStatus": "revoked",
+      "revoke": "Revoke"
+    },
+    "billing": {
+      "couponTitle": "Coupon governance",
+      "couponDescription": "Create and control internal/Stripe-linked discounts with full auditability.",
+      "couponCode": "Coupon code",
+      "couponDiscount": "Discount (%)",
+      "couponMax": "Max redemptions (0 = unlimited)",
+      "couponAllowlist": "Allowlist workspace IDs (comma separated)",
+      "couponDenylist": "Denylist workspace IDs (comma separated)",
+      "couponFieldsRequired": "Coupon code and expiry are required.",
+      "couponInvalidNumber": "Discount and max redemptions must be valid numbers.",
+      "couponCreated": "Coupon created.",
+      "couponCreateFailed": "Failed to create coupon.",
+      "couponRevoked": "Coupon revoked.",
+      "couponRevokeFailed": "Failed to revoke coupon.",
+      "createCoupon": "Create coupon",
+      "revokeCoupon": "Revoke",
+      "noCoupons": "No coupons found.",
+      "activeStatus": "active",
+      "revokedStatus": "revoked"
+    },
+    "audit": {
+      "none": "No audit entries found."
     },
     "entitlementControl": {
       "title": "Entitlement Control",

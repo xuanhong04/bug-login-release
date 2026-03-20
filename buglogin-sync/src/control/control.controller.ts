@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
+import { ControlAuthGuard } from "./control-auth.guard.js";
 import type { EntitlementState, WorkspaceMode, WorkspaceRole } from "./control.types.js";
 import { ControlService } from "./control.service.js";
 
@@ -9,6 +20,7 @@ type ActorHeaders = {
 };
 
 @Controller("v1/control")
+@UseGuards(ControlAuthGuard)
 export class ControlController {
   constructor(private readonly controlService: ControlService) {}
 

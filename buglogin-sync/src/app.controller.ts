@@ -51,11 +51,21 @@ export class AppController {
     const stripeWebhookConfigured = Boolean(
       this.configService.get<string>("STRIPE_WEBHOOK_SECRET"),
     );
+    const controlApiTokenConfigured = Boolean(
+      this.configService.get<string>("CONTROL_API_TOKEN"),
+    );
+    const controlStateFileConfigured = Boolean(
+      this.configService.get<string>("CONTROL_STATE_FILE"),
+    );
 
     return {
       auth: {
         syncTokenConfigured,
         syncJwtConfigured,
+      },
+      control: {
+        controlApiTokenConfigured,
+        controlStateFileConfigured,
       },
       stripe: {
         stripeSecretConfigured,

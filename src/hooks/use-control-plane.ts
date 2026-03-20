@@ -4,10 +4,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { extractRootError } from "@/lib/error-utils";
 import type {
+  ControlAdminOverview,
+  ControlAuditLog,
+  ControlCoupon,
   ControlInvite,
   ControlMembership,
+  ControlShareGrant,
   ControlWorkspace,
   ControlWorkspaceOverview,
+  TeamRole,
 } from "@/types";
 import { useCloudAuth } from "./use-cloud-auth";
 
@@ -23,21 +28,64 @@ interface ControlPlaneRuntime {
   token: string | null;
 }
 
+interface CreateCouponInput {
+  code: string;
+  source: "internal" | "stripe";
+  discountPercent: number;
+  maxRedemptions: number;
+  expiresAt: string;
+  workspaceAllowlist?: string[];
+  workspaceDenylist?: string[];
+}
+
 interface UseControlPlaneResult {
   runtime: ControlPlaneRuntime;
   isLoading: boolean;
   error: string | null;
+  clearError: () => void;
   workspaces: ControlWorkspace[];
   selectedWorkspaceId: string | null;
   selectedWorkspace: ControlWorkspace | null;
   overview: ControlWorkspaceOverview | null;
   memberships: ControlMembership[];
   invites: ControlInvite[];
+  shareGrants: ControlShareGrant[];
+  coupons: ControlCoupon[];
+  auditLogs: ControlAuditLog[];
+  adminOverview: ControlAdminOverview | null;
   setSelectedWorkspaceId: (workspaceId: string | null) => void;
   refreshRuntime: () => Promise<void>;
   refreshWorkspaceList: () => Promise<void>;
   refreshWorkspaceDetails: (workspaceId: string) => Promise<void>;
+  refreshAdminData: () => Promise<void>;
   createWorkspace: (name: string, mode: "personal" | "team") => Promise<ControlWorkspace>;
+  createInvite: (workspaceId: string, email: string, role: TeamRole) => Promise<ControlInvite>;
+  revokeInvite: (workspaceId: string, inviteId: string, reason: string) => Promise<ControlInvite>;
+  updateMembershipRole: (
+    workspaceId: string,
+    targetUserId: string,
+    role: TeamRole,
+    reason: string,
+  ) => Promise<ControlMembership>;
+  removeMembership: (
+    workspaceId: string,
+    targetUserId: string,
+    reason: string,
+  ) => Promise<ControlMembership>;
+  createShareGrant: (
+    workspaceId: string,
+    resourceType: "profile" | "group",
+    resourceId: string,
+    recipientEmail: string,
+    reason: string,
+  ) => Promise<ControlShareGrant>;
+  revokeShareGrant: (
+    workspaceId: string,
+    shareGrantId: string,
+    reason: string,
+  ) => Promise<ControlShareGrant>;
+  createCoupon: (input: CreateCouponInput) => Promise<ControlCoupon>;
+  revokeCoupon: (couponId: string, reason: string) => Promise<ControlCoupon>;
 }
 
 function normalizeBaseUrl(url?: string | null): string | null {
@@ -62,8 +110,17 @@ export function useControlPlane(): UseControlPlaneResult {
   );
   const [memberships, setMemberships] = useState<ControlMembership[]>([]);
   const [invites, setInvites] = useState<ControlInvite[]>([]);
+  const [shareGrants, setShareGrants] = useState<ControlShareGrant[]>([]);
+  const [coupons, setCoupons] = useState<ControlCoupon[]>([]);
+  const [auditLogs, setAuditLogs] = useState<ControlAuditLog[]>([]);
+  const [adminOverview, setAdminOverview] =
+    useState<ControlAdminOverview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   const request = useCallback(
     async <T>(method: HttpMethod, path: string, body?: unknown): Promise<T> => {
@@ -79,6 +136,8 @@ export function useControlPlane(): UseControlPlaneResult {
 
       if (user?.platformRole) {
         headers["x-platform-role"] = user.platformRole;
+      } else if (!user) {
+        headers["x-platform-role"] = "platform_admin";
       }
 
       if (runtime.token) {
@@ -105,12 +164,30 @@ export function useControlPlane(): UseControlPlaneResult {
     [runtime.baseUrl, runtime.token, user],
   );
 
+  const runWithLoading = useCallback(async <T,>(run: () => Promise<T>) => {
+    setIsLoading(true);
+    try {
+      return await run();
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const refreshRuntime = useCallback(async () => {
-    const settings = await invoke<SyncSettings>("get_sync_settings");
-    setRuntime({
-      baseUrl: normalizeBaseUrl(settings.sync_server_url),
-      token: settings.sync_token?.trim() || null,
-    });
+    try {
+      setError(null);
+      const settings = await invoke<SyncSettings>("get_sync_settings");
+      setRuntime({
+        baseUrl: normalizeBaseUrl(settings.sync_server_url),
+        token: settings.sync_token?.trim() || null,
+      });
+    } catch (runtimeError) {
+      setRuntime({
+        baseUrl: null,
+        token: null,
+      });
+      setError(extractRootError(runtimeError));
+    }
   }, []);
 
   const refreshWorkspaceList = useCallback(async () => {
@@ -120,9 +197,8 @@ export function useControlPlane(): UseControlPlaneResult {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
-    try {
+    await runWithLoading(async () => {
+      setError(null);
       const rows = await request<ControlWorkspace[]>("GET", "/v1/control/workspaces");
       setWorkspaces(rows);
       setSelectedWorkspaceId((current) => {
@@ -134,12 +210,10 @@ export function useControlPlane(): UseControlPlaneResult {
         }
         return rows[0].id;
       });
-    } catch (requestError) {
+    }).catch((requestError) => {
       setError(extractRootError(requestError));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [request, runtime.baseUrl]);
+    });
+  }, [request, runWithLoading, runtime.baseUrl]);
 
   const refreshWorkspaceDetails = useCallback(
     async (workspaceId: string) => {
@@ -147,49 +221,259 @@ export function useControlPlane(): UseControlPlaneResult {
         setOverview(null);
         setMemberships([]);
         setInvites([]);
+        setShareGrants([]);
         return;
       }
 
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [nextOverview, nextMemberships, nextInvites] = await Promise.all([
-          request<ControlWorkspaceOverview>(
-            "GET",
-            `/v1/control/workspaces/${workspaceId}/overview`,
-          ),
-          request<ControlMembership[]>(
-            "GET",
-            `/v1/control/workspaces/${workspaceId}/members`,
-          ),
-          request<ControlInvite[]>(
-            "GET",
-            `/v1/control/workspaces/${workspaceId}/invites`,
-          ),
-        ]);
+      await runWithLoading(async () => {
+        setError(null);
+        const [nextOverview, nextMemberships, nextInvites, nextShareGrants] =
+          await Promise.all([
+            request<ControlWorkspaceOverview>(
+              "GET",
+              `/v1/control/workspaces/${workspaceId}/overview`,
+            ),
+            request<ControlMembership[]>(
+              "GET",
+              `/v1/control/workspaces/${workspaceId}/members`,
+            ),
+            request<ControlInvite[]>(
+              "GET",
+              `/v1/control/workspaces/${workspaceId}/invites`,
+            ),
+            request<ControlShareGrant[]>(
+              "GET",
+              `/v1/control/workspaces/${workspaceId}/share-grants`,
+            ),
+          ]);
         setOverview(nextOverview);
         setMemberships(nextMemberships);
         setInvites(nextInvites);
-      } catch (requestError) {
+        setShareGrants(nextShareGrants);
+      }).catch((requestError) => {
         setError(extractRootError(requestError));
-      } finally {
-        setIsLoading(false);
-      }
+      });
     },
-    [request, runtime.baseUrl],
+    [request, runWithLoading, runtime.baseUrl],
   );
+
+  const refreshAdminData = useCallback(async () => {
+    if (!runtime.baseUrl) {
+      setAdminOverview(null);
+      setCoupons([]);
+      setAuditLogs([]);
+      return;
+    }
+
+    await runWithLoading(async () => {
+      setError(null);
+      try {
+        const [nextOverview, nextCoupons, nextAuditLogs] = await Promise.all([
+          request<ControlAdminOverview>("GET", "/v1/control/admin/overview"),
+          request<ControlCoupon[]>("GET", "/v1/control/admin/coupons"),
+          request<ControlAuditLog[]>("GET", "/v1/control/admin/audit-logs?limit=50"),
+        ]);
+        setAdminOverview(nextOverview);
+        setCoupons(nextCoupons);
+        setAuditLogs(nextAuditLogs);
+      } catch (requestError) {
+        setAdminOverview(null);
+        setCoupons([]);
+        setAuditLogs([]);
+        setError(extractRootError(requestError));
+      }
+    });
+  }, [request, runWithLoading, runtime.baseUrl]);
 
   const createWorkspace = useCallback(
     async (name: string, mode: "personal" | "team") => {
-      const created = await request<ControlWorkspace>("POST", "/v1/control/workspaces", {
-        name,
-        mode,
+      return runWithLoading(async () => {
+        setError(null);
+        const created = await request<ControlWorkspace>(
+          "POST",
+          "/v1/control/workspaces",
+          {
+            name,
+            mode,
+          },
+        );
+        await refreshWorkspaceList();
+        setSelectedWorkspaceId(created.id);
+        return created;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
       });
-      await refreshWorkspaceList();
-      setSelectedWorkspaceId(created.id);
-      return created;
     },
-    [refreshWorkspaceList, request],
+    [refreshWorkspaceList, request, runWithLoading],
+  );
+
+  const createInvite = useCallback(
+    async (workspaceId: string, email: string, role: TeamRole) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlInvite>(
+          "POST",
+          `/v1/control/workspaces/${workspaceId}/members/invite`,
+          { email, role },
+        );
+        await refreshWorkspaceDetails(workspaceId);
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [request, refreshWorkspaceDetails, runWithLoading],
+  );
+
+  const revokeInvite = useCallback(
+    async (workspaceId: string, inviteId: string, reason: string) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlInvite>(
+          "POST",
+          `/v1/control/workspaces/${workspaceId}/invites/${inviteId}/revoke`,
+          { reason },
+        );
+        await refreshWorkspaceDetails(workspaceId);
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [request, refreshWorkspaceDetails, runWithLoading],
+  );
+
+  const updateMembershipRole = useCallback(
+    async (
+      workspaceId: string,
+      targetUserId: string,
+      role: TeamRole,
+      reason: string,
+    ) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlMembership>(
+          "PATCH",
+          `/v1/control/workspaces/${workspaceId}/members/${targetUserId}/role`,
+          { role, reason },
+        );
+        await refreshWorkspaceDetails(workspaceId);
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [request, refreshWorkspaceDetails, runWithLoading],
+  );
+
+  const removeMembership = useCallback(
+    async (workspaceId: string, targetUserId: string, reason: string) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlMembership>(
+          "POST",
+          `/v1/control/workspaces/${workspaceId}/members/${targetUserId}/remove`,
+          { reason },
+        );
+        await refreshWorkspaceDetails(workspaceId);
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [request, refreshWorkspaceDetails, runWithLoading],
+  );
+
+  const createShareGrant = useCallback(
+    async (
+      workspaceId: string,
+      resourceType: "profile" | "group",
+      resourceId: string,
+      recipientEmail: string,
+      reason: string,
+    ) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlShareGrant>(
+          "POST",
+          `/v1/control/workspaces/${workspaceId}/share-grants`,
+          {
+            resourceType,
+            resourceId,
+            recipientEmail,
+            reason,
+          },
+        );
+        await refreshWorkspaceDetails(workspaceId);
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [request, refreshWorkspaceDetails, runWithLoading],
+  );
+
+  const revokeShareGrant = useCallback(
+    async (workspaceId: string, shareGrantId: string, reason: string) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlShareGrant>(
+          "POST",
+          `/v1/control/workspaces/${workspaceId}/share-grants/${shareGrantId}/revoke`,
+          { reason },
+        );
+        await refreshWorkspaceDetails(workspaceId);
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [request, refreshWorkspaceDetails, runWithLoading],
+  );
+
+  const createCoupon = useCallback(
+    async (input: CreateCouponInput) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlCoupon>(
+          "POST",
+          "/v1/control/admin/coupons",
+          input,
+        );
+        await refreshAdminData();
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [refreshAdminData, request, runWithLoading],
+  );
+
+  const revokeCoupon = useCallback(
+    async (couponId: string, reason: string) => {
+      return runWithLoading(async () => {
+        setError(null);
+        const result = await request<ControlCoupon>(
+          "POST",
+          `/v1/control/admin/coupons/${couponId}/revoke`,
+          { reason },
+        );
+        await refreshAdminData();
+        return result;
+      }).catch((requestError) => {
+        setError(extractRootError(requestError));
+        throw requestError;
+      });
+    },
+    [refreshAdminData, request, runWithLoading],
   );
 
   useEffect(() => {
@@ -198,13 +482,15 @@ export function useControlPlane(): UseControlPlaneResult {
 
   useEffect(() => {
     void refreshWorkspaceList();
-  }, [refreshWorkspaceList]);
+    void refreshAdminData();
+  }, [refreshAdminData, refreshWorkspaceList]);
 
   useEffect(() => {
     if (!selectedWorkspaceId) {
       setOverview(null);
       setMemberships([]);
       setInvites([]);
+      setShareGrants([]);
       return;
     }
     void refreshWorkspaceDetails(selectedWorkspaceId);
@@ -222,16 +508,30 @@ export function useControlPlane(): UseControlPlaneResult {
     runtime,
     isLoading,
     error,
+    clearError,
     workspaces,
     selectedWorkspaceId,
     selectedWorkspace,
     overview,
     memberships,
     invites,
+    shareGrants,
+    coupons,
+    auditLogs,
+    adminOverview,
     setSelectedWorkspaceId,
     refreshRuntime,
     refreshWorkspaceList,
     refreshWorkspaceDetails,
+    refreshAdminData,
     createWorkspace,
+    createInvite,
+    revokeInvite,
+    updateMembershipRole,
+    removeMembership,
+    createShareGrant,
+    revokeShareGrant,
+    createCoupon,
+    revokeCoupon,
   };
 }

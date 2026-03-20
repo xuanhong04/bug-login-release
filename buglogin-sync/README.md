@@ -66,10 +66,17 @@ Additional operational endpoints:
   - `GET /v1/control/admin/audit-logs`
   - `GET /v1/control/admin/overview`
 
+### Control-plane auth
+
+- If `CONTROL_API_TOKEN` is set, all `v1/control/*` endpoints require `Authorization: Bearer <token>`.
+- `SYNC_TOKEN` is also accepted as bearer token for self-hosted desktop integration.
+- If `CONTROL_API_TOKEN` is empty, control-plane endpoints run in open mode (development only).
+
 > Current control-plane storage is in-memory for implementation bring-up.
 > Replace `ControlService` storage maps with Postgres repositories before production rollout.
 > Bootstrap schema for Postgres target is available at `docs/control-plane-postgres-schema.sql`.
 > Production topology recommendations are documented in `docs/production-architecture.md`.
+> Temporary persistence is enabled via `CONTROL_STATE_FILE` (JSON snapshot) so control-plane state survives restarts during rollout.
 
 ## Project setup
 

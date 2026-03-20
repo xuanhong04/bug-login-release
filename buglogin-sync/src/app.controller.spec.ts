@@ -60,6 +60,10 @@ describe("AppController", () => {
           syncTokenConfigured: true,
           syncJwtConfigured: false,
         },
+        control: {
+          controlApiTokenConfigured: false,
+          controlStateFileConfigured: false,
+        },
         stripe: {
           stripeSecretConfigured: false,
           stripeWebhookConfigured: false,

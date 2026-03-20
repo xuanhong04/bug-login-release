@@ -174,4 +174,28 @@ describe("ControlService", () => {
       ),
     ).toThrow(BadRequestException);
   });
+
+  it("allows platform admin to access workspaces without direct membership", () => {
+    const workspace = service.createWorkspace(
+      {
+        userId: "owner-1",
+        email: "owner@buglogin.local",
+        platformRole: null,
+      },
+      "Workspace E",
+      "team",
+    );
+
+    const platformAdminActor = {
+      userId: "platform-admin-1",
+      email: "platform-admin@buglogin.local",
+      platformRole: "platform_admin",
+    } as const;
+
+    const visibleWorkspaces = service.listWorkspaces(platformAdminActor);
+    expect(visibleWorkspaces.map((item) => item.id)).toContain(workspace.id);
+
+    const overview = service.getWorkspaceOverview(workspace.id, platformAdminActor);
+    expect(overview.workspaceId).toBe(workspace.id);
+  });
 });

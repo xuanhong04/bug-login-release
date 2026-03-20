@@ -159,6 +159,55 @@ export interface ControlInvite {
   consumedAt: string | null;
 }
 
+export interface ControlShareGrant {
+  id: string;
+  workspaceId: string;
+  resourceType: "profile" | "group";
+  resourceId: string;
+  recipientEmail: string;
+  accessMode: "full" | "run_sync_limited";
+  createdAt: string;
+  createdBy: string;
+  revokedAt: string | null;
+}
+
+export interface ControlCoupon {
+  id: string;
+  code: string;
+  source: "internal" | "stripe";
+  discountPercent: number;
+  workspaceAllowlist: string[];
+  workspaceDenylist: string[];
+  maxRedemptions: number;
+  redeemedCount: number;
+  expiresAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface ControlAuditLog {
+  id: string;
+  action: string;
+  actor: string;
+  workspaceId?: string;
+  targetId?: string;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface ControlAdminOverview {
+  workspaces: number;
+  members: number;
+  activeInvites: number;
+  activeShareGrants: number;
+  activeCoupons: number;
+  entitlementActive: number;
+  entitlementGrace: number;
+  entitlementReadOnly: number;
+  auditsLast24h: number;
+}
+
 export interface ProfileSyncStatusEvent {
   profile_id: string;
   status: "disabled" | "syncing" | "synced" | "error" | "pending";

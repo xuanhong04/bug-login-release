@@ -1147,10 +1147,23 @@
   "adminWorkspace": {
     "subtitle": "Vùng quản trị nền tảng cho billing, entitlement và vận hành.",
     "reasonRequired": "Bắt buộc nhập lý do cho thao tác này.",
+    "reasonLabel": "Lý do thao tác",
+    "reasonPlaceholder": "Mô tả ngắn lý do thực hiện (bắt buộc)",
     "noAccessTitle": "Bạn không có quyền vào Admin Workspace",
     "noAccessDescription": "Chỉ owner/admin hoặc platform admin mới truy cập được khu vực quản trị này.",
     "entitlementUpdated": "Đã cập nhật trạng thái entitlement.",
     "entitlementUpdateFailed": "Không thể cập nhật trạng thái entitlement.",
+    "tabs": {
+      "workspace": "Workspace",
+      "billing": "Billing",
+      "audit": "Audit"
+    },
+    "metrics": {
+      "workspaces": "Workspace",
+      "members": "Thành viên",
+      "invites": "Invite mở",
+      "audits24h": "Audit 24h"
+    },
     "overview": {
       "title": "Tổng quan nền tảng",
       "description": "Giữ các control quan trọng luôn rõ ràng để vận hành auth, billing và sync an toàn khi release.",
@@ -1170,6 +1183,7 @@
       "workspaceNameRequired": "Cần nhập tên workspace.",
       "workspaceCreated": "Đã tạo workspace mới.",
       "workspaceCreateFailed": "Không thể tạo workspace.",
+      "workspaceSelectRequired": "Vui lòng chọn workspace trước.",
       "workspaceNamePlaceholder": "Tên workspace",
       "modeTeam": "Team",
       "modePersonal": "Cá nhân",
@@ -1187,6 +1201,62 @@
       "noMembers": "Chưa có thành viên.",
       "invites": "Invite",
       "noInvites": "Chưa có invite."
+    },
+    "members": {
+      "title": "Thành viên",
+      "invites": "Quản lý invite",
+      "inviteEmailRequired": "Cần nhập email mời.",
+      "inviteEmailPlaceholder": "name@company.com",
+      "inviteCreated": "Đã tạo invite.",
+      "inviteCreateFailed": "Không thể tạo invite.",
+      "inviteRevoked": "Đã thu hồi invite.",
+      "inviteRevokeFailed": "Không thể thu hồi invite.",
+      "inviteUsed": "đã chấp nhận",
+      "invitePending": "chờ chấp nhận",
+      "updateRole": "Cập nhật role",
+      "roleUpdated": "Đã cập nhật role.",
+      "roleUpdateFailed": "Không thể cập nhật role.",
+      "removeMember": "Xóa thành viên",
+      "memberRemoved": "Đã xóa thành viên.",
+      "memberRemoveFailed": "Không thể xóa thành viên.",
+      "revokeInvite": "Thu hồi invite"
+    },
+    "share": {
+      "title": "Share grant",
+      "fieldsRequired": "Cần nhập resource ID và email người nhận.",
+      "resourceIdPlaceholder": "Resource ID (profile/group)",
+      "recipientPlaceholder": "Email người nhận",
+      "created": "Đã tạo share grant.",
+      "createFailed": "Không thể tạo share grant.",
+      "revoked": "Đã thu hồi share grant.",
+      "revokeFailed": "Không thể thu hồi share grant.",
+      "none": "Chưa có share grant.",
+      "activeStatus": "đang hiệu lực",
+      "revokedStatus": "đã thu hồi",
+      "revoke": "Thu hồi"
+    },
+    "billing": {
+      "couponTitle": "Quản trị coupon",
+      "couponDescription": "Tạo và kiểm soát giảm giá nội bộ hoặc Stripe với đầy đủ audit.",
+      "couponCode": "Mã coupon",
+      "couponDiscount": "Giảm giá (%)",
+      "couponMax": "Giới hạn lượt dùng (0 = không giới hạn)",
+      "couponAllowlist": "Allowlist workspace ID (phân tách dấu phẩy)",
+      "couponDenylist": "Denylist workspace ID (phân tách dấu phẩy)",
+      "couponFieldsRequired": "Bắt buộc nhập mã coupon và thời hạn.",
+      "couponInvalidNumber": "Giảm giá và giới hạn lượt dùng phải là số hợp lệ.",
+      "couponCreated": "Đã tạo coupon.",
+      "couponCreateFailed": "Không thể tạo coupon.",
+      "couponRevoked": "Đã thu hồi coupon.",
+      "couponRevokeFailed": "Không thể thu hồi coupon.",
+      "createCoupon": "Tạo coupon",
+      "revokeCoupon": "Thu hồi",
+      "noCoupons": "Chưa có coupon.",
+      "activeStatus": "đang hiệu lực",
+      "revokedStatus": "đã thu hồi"
+    },
+    "audit": {
+      "none": "Chưa có bản ghi audit."
     },
     "entitlementControl": {
       "title": "Điều khiển Entitlement",
