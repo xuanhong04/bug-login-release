@@ -1,21 +1,21 @@
 "use client";
 
+import {
+  ChevronRight,
+  Globe,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings2,
+  Shield,
+  SquareTerminal,
+  UserRound,
+} from "lucide-react";
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  LuChevronLeft,
-  LuChevronRight,
-  LuGlobe,
-  LuPanelLeftClose,
-  LuPanelLeftOpen,
-  LuSettings2,
-  LuShield,
-  LuSquareTerminal,
-} from "react-icons/lu";
 import { cn } from "@/lib/utils";
 import type { AppSection } from "@/types";
 import { Logo } from "./icons/logo";
-import { Button } from "./ui/button";
+import { ScrollArea } from "./ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type NavItem = {
@@ -28,22 +28,22 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "profiles",
     labelKey: "shell.sections.profiles",
-    icon: LuSquareTerminal,
+    icon: SquareTerminal,
   },
   {
     id: "proxies",
     labelKey: "shell.sections.proxies",
-    icon: LuGlobe,
+    icon: Globe,
   },
   {
     id: "integrations",
     labelKey: "shell.sections.integrations",
-    icon: LuShield,
+    icon: Shield,
   },
   {
     id: "settings",
     labelKey: "shell.sections.settings",
-    icon: LuSettings2,
+    icon: Settings2,
   },
 ];
 
@@ -51,110 +51,164 @@ type Props = {
   activeSection: AppSection;
   collapsed: boolean;
   onSectionChange: (section: AppSection) => void;
-  onCollapsedChange: (collapsed: boolean) => void;
+  onToggleCollapsed?: () => void;
 };
 
 export function AppSidebar({
   activeSection,
   collapsed,
   onSectionChange,
-  onCollapsedChange,
+  onToggleCollapsed,
 }: Props) {
   const { t } = useTranslation();
+
+  const renderNavItem = (item: NavItem) => {
+    const Icon = item.icon;
+    const isActive = activeSection === item.id;
+
+    const button = (
+      <button
+        type="button"
+        onClick={() => onSectionChange(item.id)}
+        className={cn(
+          "group flex h-10 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] font-semibold leading-[1.25] transition-colors",
+          isActive
+            ? "bg-muted text-foreground"
+            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        <Icon
+          className={cn(
+            "h-4 w-4 shrink-0",
+            isActive
+              ? "text-foreground"
+              : "text-muted-foreground group-hover:text-foreground",
+          )}
+        />
+        {!collapsed && (
+          <>
+            <span className="min-w-0">{t(item.labelKey)}</span>
+            {isActive && (
+              <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+          </>
+        )}
+      </button>
+    );
+
+    if (!collapsed) {
+      return button;
+    }
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
+      </Tooltip>
+    );
+  };
 
   return (
     <aside
       className={cn(
-        "app-sidebar-font flex h-screen flex-col border-r bg-background/80 text-[12.5px] tracking-[-0.005em] transition-all duration-300",
-        collapsed ? "w-[88px]" : "w-[264px]",
+        "app-shell-sidebar app-sidebar-font relative flex h-screen flex-col border-r border-border bg-background text-foreground tracking-normal transition-all duration-200",
+        collapsed ? "w-[80px]" : "w-[258px]",
       )}
     >
+      {/* ── Brand header — fixed height aligned with main content header ──
+          Toggle button always lives here (collapsed or expanded) so the
+          user always looks in the same spot. */}
       <div
         className={cn(
-          "flex items-center justify-between px-4 py-5",
-          collapsed && "px-3",
+          "flex h-11 shrink-0 items-center border-b border-border",
+          collapsed ? "gap-1 px-2" : "gap-1 px-3",
         )}
       >
-        <div className="flex items-center gap-3 overflow-hidden">
-          <Logo className="h-10 w-10 shrink-0" />
-        </div>
+        {collapsed ? (
+          <>
+            {/* Logo home button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onSectionChange("profiles")}
+                  className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted/60"
+                >
+                  <Logo variant="icon" className="h-8 w-8 rounded-md" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">BugLogin</TooltipContent>
+            </Tooltip>
 
-        <Button
-          size="sm"
-          variant="ghost"
-          className="shrink-0"
-          onClick={() => onCollapsedChange(!collapsed)}
-          aria-label={
-            collapsed ? t("shell.expandSidebar") : t("shell.collapseSidebar")
-          }
-          title={
-            collapsed ? t("shell.expandSidebar") : t("shell.collapseSidebar")
-          }
-        >
-          {collapsed ? (
-            <LuPanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <LuPanelLeftClose className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-
-      <nav className="flex-1 space-y-1 px-3 pb-4">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const button = (
+            {/* Expand toggle — same header zone as the collapse toggle */}
+            {onToggleCollapsed && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onToggleCollapsed}
+                    aria-label={t("shell.expandSidebar")}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <PanelLeftOpen className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {t("shell.expandSidebar")}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </>
+        ) : (
+          <>
             <button
               type="button"
-              key={item.id}
-              onClick={() => onSectionChange(item.id)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors",
-                "text-[13px] leading-tight",
-                activeSection === item.id
-                  ? "bg-primary/10 text-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                collapsed && "justify-center px-0",
-              )}
+              onClick={() => onSectionChange("profiles")}
+              className="flex min-w-0 flex-1 items-center rounded-md px-1 py-1.5 text-left transition-colors hover:bg-muted/50"
             >
-              <Icon className="h-5 w-5 shrink-0" />
-              {!collapsed && (
-                <span className="truncate">{t(item.labelKey)}</span>
-              )}
-              {!collapsed && activeSection === item.id && (
-                <LuChevronRight className="ml-auto h-4 w-4 shrink-0" />
-              )}
+              <Logo variant="full" className="h-7 max-w-[148px]" />
             </button>
-          );
+            {onToggleCollapsed && (
+              <button
+                type="button"
+                onClick={onToggleCollapsed}
+                aria-label={t("shell.collapseSidebar")}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            )}
+          </>
+        )}
+      </div>
 
-          if (!collapsed) {
-            return button;
-          }
+      {/* ── Navigation ── */}
+      <ScrollArea className="flex-1 px-2 pb-3 pt-1">
+        <div className="space-y-0.5 pb-2">
+          {NAV_ITEMS.map((item) => (
+            <div key={item.id}>{renderNavItem(item)}</div>
+          ))}
+        </div>
+      </ScrollArea>
 
-          return (
-            <Tooltip key={item.id}>
-              <TooltipTrigger asChild>{button}</TooltipTrigger>
-              <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </nav>
-
-      <div className="border-t px-3 py-4">
+      {/* ── Footer ── */}
+      <div className="border-t border-border p-2">
         <div
           className={cn(
-            "flex items-center gap-3 rounded-xl border bg-muted/20 px-3 py-3",
-            collapsed && "justify-center px-2",
+            "flex items-center gap-2 rounded-md px-2 py-1.5",
+            collapsed && "justify-center px-0",
           )}
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
-            <LuChevronLeft className="h-4 w-4" />
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+            <UserRound className="h-4 w-4" />
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium">
+              <p className="truncate text-[12px] font-semibold text-foreground">
                 {t("shell.workspaceMode")}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="text-[11px] font-medium leading-[1.35] text-muted-foreground">
                 {t("shell.workspaceHint")}
               </p>
             </div>

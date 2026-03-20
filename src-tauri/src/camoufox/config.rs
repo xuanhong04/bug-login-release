@@ -92,7 +92,7 @@ fn cast_to_properties(
 }
 
 /// Replace Firefox version in user agent and related strings.
-fn replace_ff_version(s: &str, version: u32) -> String {
+pub(crate) fn replace_ff_version(s: &str, version: u32) -> String {
   // Match patterns like "135.0" (Firefox version) and replace with new version
   let re = regex_lite::Regex::new(r"(?<!\d)(1[0-9]{2})(\.0)(?!\d)").unwrap_or_else(|_| {
     // Fallback - just do simple replacement

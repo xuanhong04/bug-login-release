@@ -1766,6 +1766,10 @@ impl ProfileManager {
       // Ensure plain keywords are routed to search engine instead of direct host navigation
       "user_pref(\"keyword.enabled\", true);".to_string(),
       // Keep normal in-session back/forward navigation behavior.
+      // camoufox.cfg sets max_entries=0 which kills the session history stack;
+      // override it here so Back/Forward buttons work normally.
+      "user_pref(\"browser.sessionhistory.max_entries\", 50);".to_string(),
+      "user_pref(\"browser.sessionhistory.max_total_viewers\", -1);".to_string(),
       "user_pref(\"places.history.enabled\", true);".to_string(),
       "user_pref(\"browser.fixup.dns_first_for_single_words\", false);".to_string(),
       "user_pref(\"browser.urlbar.dnsResolveSingleWordsAfterSearch\", 0);".to_string(),
@@ -1826,6 +1830,8 @@ impl ProfileManager {
           "user_pref(\"network.proxy.socks_version\", {});",
           if proxy.proxy_type == "socks5" { 5 } else { 4 }
         ),
+        // Force DNS resolution through the SOCKS proxy to prevent DNS leaks
+        "user_pref(\"network.proxy.socks_remote_dns\", true);".to_string(),
         "user_pref(\"network.proxy.http\", \"\");".to_string(),
         "user_pref(\"network.proxy.http_port\", 0);".to_string(),
         "user_pref(\"network.proxy.ssl\", \"\");".to_string(),
@@ -1852,6 +1858,12 @@ impl ProfileManager {
       // Disable QUIC/HTTP3 - it bypasses HTTP proxy
       "user_pref(\"network.http.http3.enable\", false);".to_string(),
       "user_pref(\"network.http.http3.enabled\", false);".to_string(),
+      // Prevent WebRTC from leaking real IP when behind proxy
+      "user_pref(\"media.peerconnection.ice.default_address_only\", true);".to_string(),
+      "user_pref(\"media.peerconnection.ice.no_host\", true);".to_string(),
+      "user_pref(\"media.peerconnection.ice.proxy_only_if_behind_proxy\", true);".to_string(),
+      // Disable Do Not Track header (unusual fingerprint signal)
+      "user_pref(\"privacy.donottrackheader.enabled\", false);".to_string(),
     ]);
 
     // Write settings to user.js file

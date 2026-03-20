@@ -350,6 +350,77 @@ impl CamoufoxManager {
       fingerprint_config.remove(key);
     }
 
+    // Anti-detection: sync timezone and WebRTC IP with proxy at launch time.
+    // config.proxy is always None at launch (cleared after fingerprint generation in
+    // profile/manager.rs:209), so we resolve the actual upstream proxy from profile.proxy_id.
+    let proxy_url_for_geo = profile.proxy_id.as_deref().and_then(|pid| {
+      let s = crate::proxy_manager::PROXY_MANAGER.get_proxy_settings_by_id(pid)?;
+      let url = match (&s.username, &s.password) {
+        (Some(u), Some(p)) => format!(
+          "{}://{}:{}@{}:{}",
+          s.proxy_type.to_lowercase(),
+          u,
+          p,
+          s.host,
+          s.port
+        ),
+        _ => format!("{}://{}:{}", s.proxy_type.to_lowercase(), s.host, s.port),
+      };
+      Some(url)
+    });
+    if let Some(proxy_url) = &proxy_url_for_geo {
+      match crate::camoufox::geolocation::fetch_public_ip(Some(proxy_url.as_str())).await {
+        Ok(ip) => {
+          match crate::camoufox::geolocation::get_geolocation(&ip) {
+            Ok(geo) => {
+              log::info!(
+                "Anti-detection: syncing timezone to proxy IP {} -> {}",
+                ip,
+                geo.timezone
+              );
+              fingerprint_config.insert("timezone".to_string(), serde_json::json!(geo.timezone));
+            }
+            Err(e) => {
+              log::warn!("Failed to get geolocation for proxy IP {}: {}", ip, e);
+            }
+          }
+          if crate::camoufox::geolocation::is_ipv4(&ip) {
+            fingerprint_config.insert("webrtc:ipv4".to_string(), serde_json::json!(ip));
+          } else if crate::camoufox::geolocation::is_ipv6(&ip) {
+            fingerprint_config.insert("webrtc:ipv6".to_string(), serde_json::json!(ip));
+          }
+        }
+        Err(e) => {
+          log::warn!(
+            "Failed to fetch public IP through proxy for anti-detection sync: {}",
+            e
+          );
+        }
+      }
+    }
+
+    // Anti-detection: refresh UA version to match the currently installed Camoufox binary.
+    // The stored fingerprint UA may be stale if Camoufox was updated since profile creation.
+    if let Some(current_version) = crate::camoufox::config::get_firefox_version(&executable_path) {
+      for key in ["navigator.userAgent", "navigator.appVersion"] {
+        if let Some(old_val) = fingerprint_config
+          .get(key)
+          .and_then(|v| v.as_str())
+          .map(String::from)
+        {
+          let updated = crate::camoufox::config::replace_ff_version(&old_val, current_version);
+          if updated != old_val {
+            log::info!(
+              "Anti-detection: refreshed {} to Camoufox v{}",
+              key,
+              current_version
+            );
+            fingerprint_config.insert(key.to_string(), serde_json::json!(updated));
+          }
+        }
+      }
+    }
+
     // Convert to environment variables using CAMOU_CONFIG chunking
     let env_vars = crate::camoufox::env_vars::config_to_env_vars(&fingerprint_config)
       .map_err(|e| format!("Failed to convert config to env vars: {e}"))?;
@@ -357,7 +428,7 @@ impl CamoufoxManager {
     // Build command arguments
     // Note: We intentionally do NOT use -no-remote to allow opening URLs in existing instances
     // via Firefox's remote messaging mechanism. This enables "open in new tab" functionality
-    // when BugLogin is set as the default browser.
+    // when Donut is set as the default browser.
     let mut args = vec![
       "-profile".to_string(),
       std::path::Path::new(profile_path)
@@ -815,6 +886,10 @@ impl CamoufoxManager {
 fn ensure_keyword_search_preferences(profile_path: &std::path::Path, ephemeral: bool) {
   let mut required_prefs = vec![
     "user_pref(\"keyword.enabled\", true);",
+    // camoufox.cfg sets max_entries=0 which kills the session history stack;
+    // override it here so Back/Forward buttons work normally.
+    "user_pref(\"browser.sessionhistory.max_entries\", 50);",
+    "user_pref(\"browser.sessionhistory.max_total_viewers\", -1);",
     "user_pref(\"places.history.enabled\", true);",
     "user_pref(\"browser.fixup.alternate.enabled\", false);",
     "user_pref(\"browser.fixup.dns_first_for_single_words\", false);",
