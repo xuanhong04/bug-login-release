@@ -36,6 +36,46 @@ interface SyncSettings {
   sync_token?: string;
 }
 
+type QuickPreset = {
+  id: string;
+  labelKey: string;
+  email: string;
+  scope: "workspace_user" | "platform_admin";
+};
+
+const QUICK_PRESETS: QuickPreset[] = [
+  {
+    id: "platform_admin",
+    labelKey: "authDialog.quickPresetPlatformAdmin",
+    email: "platform.admin@buglogin.local",
+    scope: "platform_admin",
+  },
+  {
+    id: "owner",
+    labelKey: "authDialog.quickPresetOwner",
+    email: "owner.preview@buglogin.local",
+    scope: "workspace_user",
+  },
+  {
+    id: "admin",
+    labelKey: "authDialog.quickPresetAdmin",
+    email: "admin.preview@buglogin.local",
+    scope: "workspace_user",
+  },
+  {
+    id: "member",
+    labelKey: "authDialog.quickPresetMember",
+    email: "member.preview@buglogin.local",
+    scope: "workspace_user",
+  },
+  {
+    id: "viewer",
+    labelKey: "authDialog.quickPresetViewer",
+    email: "viewer.preview@buglogin.local",
+    scope: "workspace_user",
+  },
+];
+
 function normalizeBaseUrl(url?: string | null): string | null {
   if (!url) {
     return null;
@@ -197,6 +237,33 @@ export function CloudAuthDialog({
               placeholder={t("authDialog.emailPlaceholder")}
               disabled={isSigningIn}
             />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-foreground">
+              {t("authDialog.quickPresetTitle")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {QUICK_PRESETS.map((preset) => (
+                <LoadingButton
+                  key={preset.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSigningIn}
+                  isLoading={false}
+                  onClick={() => {
+                    setEmail(preset.email);
+                    setLoginScope(preset.scope);
+                  }}
+                >
+                  {t(preset.labelKey)}
+                </LoadingButton>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("authDialog.quickPresetHint")}
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -53,6 +53,21 @@ function normalizeBaseUrl(url?: string | null): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function getPreviewRole(email: string): TeamRole | null {
+  switch (email) {
+    case "owner.preview@buglogin.local":
+      return "owner";
+    case "admin.preview@buglogin.local":
+      return "admin";
+    case "member.preview@buglogin.local":
+      return "member";
+    case "viewer.preview@buglogin.local":
+      return "viewer";
+    default:
+      return null;
+  }
+}
+
 function deriveLocalUserId(normalizedEmail: string): string {
   let hash = 0;
   for (const char of normalizedEmail) {
@@ -254,14 +269,27 @@ export function useCloudAuth(): UseCloudAuthReturn {
       };
 
       const isPlatformAdmin = options?.scope === "platform_admin";
-      const allowUnassigned = options?.allowUnassigned ?? false;
-      if (!isPlatformAdmin && !allowUnassigned && !enrichedUser.teamRole) {
+      const previewRole = getPreviewRole(normalizedEmail);
+      const effectiveUser =
+        !isPlatformAdmin && previewRole
+          ? {
+              ...enrichedUser,
+              teamRole: previewRole,
+            }
+          : enrichedUser;
+      const allowUnassigned =
+        options?.allowUnassigned ?? previewRole !== null;
+      if (!isPlatformAdmin && !allowUnassigned && !effectiveUser.teamRole) {
         updateAuthState(null);
         throw new Error("invite_required");
       }
 
-      updateAuthState(enrichedState);
-      return enrichedState;
+      const finalState: CloudAuthState = {
+        ...enrichedState,
+        user: effectiveUser,
+      };
+      updateAuthState(finalState);
+      return finalState;
     },
     [enrichUserFromControlPlane, updateAuthState],
   );

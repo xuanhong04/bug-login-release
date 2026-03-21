@@ -136,6 +136,11 @@ export function AppSidebar({
         collapsed ? "w-[80px]" : "w-[258px]",
       )}
     >
+      <div
+        className="shrink-0"
+        style={{ height: "var(--window-titlebar-height)" }}
+      />
+
       {/* ── Brand header — fixed height aligned with main content header ──
           Toggle button always lives here (collapsed or expanded) so the
           user always looks in the same spot. */}
