@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import type { AuthLoginScope } from "@/lib/auth-quick-presets";
+import { getPreviewRoleByEmail } from "@/lib/auth-quick-presets";
 import { extractRootError } from "@/lib/error-utils";
 import { normalizeTeamRole } from "@/lib/team-permissions";
 import type {
@@ -8,15 +10,12 @@ import type {
   CloudUser,
   ControlMembership,
   ControlWorkspace,
-  TeamRole,
 } from "@/types";
 
 interface SyncSettings {
   sync_server_url?: string;
   sync_token?: string;
 }
-
-type LoginScope = "workspace_user" | "platform_admin";
 
 interface UseCloudAuthReturn {
   user: CloudUser | null;
@@ -25,7 +24,7 @@ interface UseCloudAuthReturn {
   loginWithEmail: (
     email: string,
     options?: {
-      scope?: LoginScope;
+      scope?: AuthLoginScope;
       allowUnassigned?: boolean;
     },
   ) => Promise<CloudAuthState>;
@@ -53,21 +52,6 @@ function normalizeBaseUrl(url?: string | null): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function getPreviewRole(email: string): TeamRole | null {
-  switch (email) {
-    case "owner.preview@buglogin.local":
-      return "owner";
-    case "admin.preview@buglogin.local":
-      return "admin";
-    case "member.preview@buglogin.local":
-      return "member";
-    case "viewer.preview@buglogin.local":
-      return "viewer";
-    default:
-      return null;
-  }
-}
-
 function deriveLocalUserId(normalizedEmail: string): string {
   let hash = 0;
   for (const char of normalizedEmail) {
@@ -79,7 +63,7 @@ function deriveLocalUserId(normalizedEmail: string): string {
 
 function defaultLocalUser(
   normalizedEmail: string,
-  scope: LoginScope = "workspace_user",
+  scope: AuthLoginScope = "workspace_user",
 ): CloudUser {
   return {
     id: deriveLocalUserId(normalizedEmail),
@@ -246,7 +230,7 @@ export function useCloudAuth(): UseCloudAuthReturn {
     async (
       email: string,
       options?: {
-        scope?: LoginScope;
+        scope?: AuthLoginScope;
         allowUnassigned?: boolean;
       },
     ): Promise<CloudAuthState> => {
@@ -269,7 +253,7 @@ export function useCloudAuth(): UseCloudAuthReturn {
       };
 
       const isPlatformAdmin = options?.scope === "platform_admin";
-      const previewRole = getPreviewRole(normalizedEmail);
+      const previewRole = getPreviewRoleByEmail(normalizedEmail);
       const effectiveUser =
         !isPlatformAdmin && previewRole
           ? {

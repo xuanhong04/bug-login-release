@@ -1207,6 +1207,51 @@
     "googlePendingTitle": "Google Login (sẽ mở sau)",
     "googlePendingDescription": "Google OAuth sẽ được bật sau khi backend sẵn sàng. Hiện tại đăng nhập bằng email là luồng chính."
   },
+  "authLanding": {
+    "title": "Chào mừng đến BugLogin",
+    "subtitle": "Đăng nhập và chọn gói phù hợp với quy mô team. Workspace sẽ bị khóa tới khi tài khoản được xác thực.",
+    "pricingTitle": "Bảng giá",
+    "pricingDescription": "Các gói SaaS rõ ràng, giới hạn minh bạch, dễ vận hành.",
+    "monthly": "Theo tháng",
+    "yearly": "Theo năm",
+    "yearlySave": "Tiết kiệm 20% theo năm",
+    "recommended": "Khuyến nghị",
+    "perMonth": "tháng",
+    "perYear": "năm",
+    "planSelected": "Đã chọn gói",
+    "selectedPlan": "Đang chọn",
+    "selectPlan": "Chọn gói",
+    "featureProfiles": "{{count}} profile quản lý",
+    "featureMembers": "{{count}} thành viên",
+    "featureStorage": "{{count}} GB dung lượng sync",
+    "featureSupport": "Hỗ trợ {{level}}",
+    "support": {
+      "email": "Email",
+      "priority": "Ưu tiên",
+      "dedicated": "Chuyên trách"
+    },
+    "stripeReady": "Stripe billing đã kết nối. Có thể bật checkout trực tiếp cho luồng production.",
+    "stripePending": "Stripe billing chưa cấu hình. Bạn vẫn có thể chọn gói, checkout sẽ bật ngay sau khi cấu hình xong.",
+    "signInTitle": "Đăng nhập để tiếp tục",
+    "signInDescription": "Dùng email được mời để vào workspace. Phạm vi platform admin dành cho vận hành nội bộ.",
+    "syncReady": "Dịch vụ sync đã cấu hình.",
+    "syncPending": "Dịch vụ sync chưa hoàn tất cấu hình. Hãy cấu hình để mở khóa backup/restore đầy đủ.",
+    "openSyncConfig": "Mở Sync Config",
+    "plans": {
+      "starter": {
+        "name": "Starter",
+        "description": "Phù hợp cá nhân và nhóm thử nghiệm nhỏ."
+      },
+      "growth": {
+        "name": "Growth",
+        "description": "Phù hợp nhất cho team vận hành hằng ngày."
+      },
+      "scale": {
+        "name": "Scale",
+        "description": "Cho vận hành lớn với nhu cầu dung lượng cao."
+      }
+    }
+  },
   "adminWorkspace": {
     "subtitle": "Vùng quản trị nền tảng cho billing, entitlement và vận hành.",
     "reasonRequired": "Bắt buộc nhập lý do cho thao tác này.",

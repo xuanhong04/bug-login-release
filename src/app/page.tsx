@@ -6,6 +6,7 @@ import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AppSidebar } from "@/components/app-sidebar";
+import { AuthPricingWorkspace } from "@/components/auth-pricing-workspace";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CloudAuthDialog } from "@/components/cloud-auth-dialog";
@@ -158,7 +159,10 @@ export default function Home() {
   const teamRole = normalizeTeamRole(cloudUser?.teamRole);
   const { entitlement, isReadOnly, runtimeConfig } = useRuntimeAccess();
   const syncUnlocked = runtimeConfig?.s3_sync === "ready";
-  const canAccessAdminWorkspace = Boolean(cloudUser);
+  const canAccessAdminWorkspace =
+    cloudUser?.platformRole === "platform_admin" ||
+    teamRole === "owner" ||
+    teamRole === "admin";
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<AppSection>("profiles");
@@ -1467,6 +1471,21 @@ export default function Home() {
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
 
   const renderActiveSection = () => {
+    if (!cloudUser) {
+      return (
+        <WorkspacePageShell
+          title={t("authLanding.title")}
+          description={t("authLanding.subtitle")}
+          contentClassName="max-w-none space-y-4 pb-0"
+        >
+          <AuthPricingWorkspace
+            runtimeConfig={runtimeConfig}
+            onOpenSyncConfig={() => setSyncConfigDialogOpen(true)}
+          />
+        </WorkspacePageShell>
+      );
+    }
+
     switch (activeSection) {
       case "proxies":
         return (

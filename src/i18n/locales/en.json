@@ -1207,6 +1207,51 @@
     "googlePendingTitle": "Google Login (Coming Later)",
     "googlePendingDescription": "Google OAuth will be enabled after backend is configured. Email sign-in is currently the primary path."
   },
+  "authLanding": {
+    "title": "Welcome to BugLogin",
+    "subtitle": "Sign in and choose the plan that matches your team scale. This workspace is locked until account access is verified.",
+    "pricingTitle": "Pricing",
+    "pricingDescription": "Simple SaaS tiers with clear limits and predictable operations.",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "yearlySave": "Save 20% yearly",
+    "recommended": "Recommended",
+    "perMonth": "month",
+    "perYear": "year",
+    "planSelected": "Plan selected",
+    "selectedPlan": "Selected",
+    "selectPlan": "Select plan",
+    "featureProfiles": "{{count}} managed profiles",
+    "featureMembers": "{{count}} team members",
+    "featureStorage": "{{count}} GB sync storage",
+    "featureSupport": "{{level}} support",
+    "support": {
+      "email": "Email",
+      "priority": "Priority",
+      "dedicated": "Dedicated"
+    },
+    "stripeReady": "Stripe billing is connected. Checkout can be enabled directly in production flow.",
+    "stripePending": "Stripe billing is not configured yet. Plan selection stays available, and checkout can be enabled after config.",
+    "signInTitle": "Sign in to continue",
+    "signInDescription": "Use invited email for workspace access. Platform admin scope is for internal operators.",
+    "syncReady": "Sync service is configured.",
+    "syncPending": "Sync service is pending setup. Configure it to unlock full backup and restore.",
+    "openSyncConfig": "Open Sync Config",
+    "plans": {
+      "starter": {
+        "name": "Starter",
+        "description": "For solo operators and small experiments."
+      },
+      "growth": {
+        "name": "Growth",
+        "description": "Best fit for active teams in daily production."
+      },
+      "scale": {
+        "name": "Scale",
+        "description": "High-capacity operations with larger teams."
+      }
+    }
+  },
   "adminWorkspace": {
     "subtitle": "Platform governance for billing, entitlements, and operational controls.",
     "reasonRequired": "Reason is required for this action.",

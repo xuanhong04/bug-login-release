@@ -1,9 +1,13 @@
 "use client";
 
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
+import {
+  type AuthLoginScope,
+  AUTH_QUICK_PRESETS,
+} from "@/lib/auth-quick-presets";
+import { acceptControlInviteIfProvided } from "@/lib/control-invite";
 import { extractRootError } from "@/lib/error-utils";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { LoadingButton } from "./loading-button";
@@ -31,59 +35,6 @@ interface CloudAuthDialogProps {
   prefilledInviteToken?: string | null;
 }
 
-interface SyncSettings {
-  sync_server_url?: string;
-  sync_token?: string;
-}
-
-type QuickPreset = {
-  id: string;
-  labelKey: string;
-  email: string;
-  scope: "workspace_user" | "platform_admin";
-};
-
-const QUICK_PRESETS: QuickPreset[] = [
-  {
-    id: "platform_admin",
-    labelKey: "authDialog.quickPresetPlatformAdmin",
-    email: "platform.admin@buglogin.local",
-    scope: "platform_admin",
-  },
-  {
-    id: "owner",
-    labelKey: "authDialog.quickPresetOwner",
-    email: "owner.preview@buglogin.local",
-    scope: "workspace_user",
-  },
-  {
-    id: "admin",
-    labelKey: "authDialog.quickPresetAdmin",
-    email: "admin.preview@buglogin.local",
-    scope: "workspace_user",
-  },
-  {
-    id: "member",
-    labelKey: "authDialog.quickPresetMember",
-    email: "member.preview@buglogin.local",
-    scope: "workspace_user",
-  },
-  {
-    id: "viewer",
-    labelKey: "authDialog.quickPresetViewer",
-    email: "viewer.preview@buglogin.local",
-    scope: "workspace_user",
-  },
-];
-
-function normalizeBaseUrl(url?: string | null): string | null {
-  if (!url) {
-    return null;
-  }
-  const trimmed = url.trim().replace(/\/$/, "");
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -101,9 +52,7 @@ export function CloudAuthDialog({
   const { loginWithEmail, refreshProfile } = useCloudAuth();
   const [email, setEmail] = useState("");
   const [inviteToken, setInviteToken] = useState("");
-  const [loginScope, setLoginScope] = useState<"workspace_user" | "platform_admin">(
-    "workspace_user",
-  );
+  const [loginScope, setLoginScope] = useState<AuthLoginScope>("workspace_user");
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   useEffect(() => {
@@ -122,55 +71,6 @@ export function CloudAuthDialog({
     setInviteToken(prefilledInviteToken);
   }, [isOpen, prefilledInviteToken]);
 
-  const acceptInviteIfProvided = async (
-    userId: string,
-    verifiedEmail: string,
-    platformRole?: string,
-  ) => {
-    const token = inviteToken.trim();
-    if (!token) {
-      return;
-    }
-
-    try {
-      const settings = await invoke<SyncSettings>("get_sync_settings");
-      const baseUrl = normalizeBaseUrl(settings.sync_server_url);
-      if (!baseUrl) {
-        showErrorToast(t("authDialog.inviteServerMissing"));
-        return;
-      }
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "x-user-id": userId,
-        "x-user-email": verifiedEmail,
-      };
-      if (platformRole) {
-        headers["x-platform-role"] = platformRole;
-      }
-      if (settings.sync_token?.trim()) {
-        headers.Authorization = `Bearer ${settings.sync_token.trim()}`;
-      }
-
-      const response = await fetch(`${baseUrl}/v1/control/auth/invite/accept`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ token }),
-      });
-
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`invite_accept_${response.status}:${body}`);
-      }
-
-      showSuccessToast(t("authDialog.inviteAccepted"));
-    } catch (error) {
-      showErrorToast(t("authDialog.inviteAcceptFailed"), {
-        description: extractRootError(error),
-      });
-    }
-  };
-
   const handleSignIn = async () => {
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
@@ -185,11 +85,26 @@ export function CloudAuthDialog({
         scope: loginScope,
         allowUnassigned: hasInviteToken,
       });
-      await acceptInviteIfProvided(
-        authState.user.id,
-        authState.user.email,
-        authState.user.platformRole,
-      );
+      try {
+        const inviteStatus = await acceptControlInviteIfProvided({
+          token: inviteToken,
+          userId: authState.user.id,
+          email: authState.user.email,
+          platformRole: authState.user.platformRole,
+        });
+        if (inviteStatus === "accepted") {
+          showSuccessToast(t("authDialog.inviteAccepted"));
+        }
+      } catch (inviteError) {
+        const inviteMessage = extractRootError(inviteError);
+        if (inviteMessage.includes("invite_server_missing")) {
+          showErrorToast(t("authDialog.inviteServerMissing"));
+        } else {
+          showErrorToast(t("authDialog.inviteAcceptFailed"), {
+            description: inviteMessage,
+          });
+        }
+      }
       await refreshProfile().catch(() => null);
       showSuccessToast(t("authDialog.loginSuccess"));
       onClose();
@@ -244,7 +159,7 @@ export function CloudAuthDialog({
               {t("authDialog.quickPresetTitle")}
             </p>
             <div className="flex flex-wrap gap-2">
-              {QUICK_PRESETS.map((preset) => (
+              {AUTH_QUICK_PRESETS.map((preset) => (
                 <LoadingButton
                   key={preset.id}
                   type="button"
@@ -271,7 +186,7 @@ export function CloudAuthDialog({
             <Select
               value={loginScope}
               onValueChange={(value) =>
-                setLoginScope(value as "workspace_user" | "platform_admin")
+                setLoginScope(value as AuthLoginScope)
               }
               disabled={isSigningIn}
             >
