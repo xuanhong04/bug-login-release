@@ -1488,6 +1488,7 @@
       "settings": "Settings",
       "integrations": "Integrations",
       "admin": "Admin Workspace",
+      "adminPanel": "Admin Panel",
       "billing": "Pricing & Billing"
     },
     "shared": {

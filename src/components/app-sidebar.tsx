@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  BarChart3,
   ChevronsUpDown,
   ChevronRight,
+  FileText,
   Globe,
   LayoutDashboard,
   LogOut,
@@ -11,8 +13,11 @@ import {
   Receipt,
   Settings2,
   Shield,
+  ShieldCheck,
   SquareTerminal,
   UserRound,
+  Users,
+  Wrench,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { useMemo } from "react";
@@ -38,7 +43,7 @@ type NavItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const NAV_ITEMS: NavItem[] = [
+const APP_NAV_ITEMS: NavItem[] = [
   {
     id: "profiles",
     labelKey: "shell.sections.profiles",
@@ -61,9 +66,9 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-const ADMIN_NAV_ITEM: NavItem = {
-  id: "admin",
-  labelKey: "shell.sections.admin",
+const ADMIN_ENTRY_NAV_ITEM: NavItem = {
+  id: "admin-overview",
+  labelKey: "shell.sections.adminPanel",
   icon: LayoutDashboard,
 };
 
@@ -72,6 +77,43 @@ const BILLING_NAV_ITEM: NavItem = {
   labelKey: "shell.sections.billing",
   icon: Receipt,
 };
+
+const ADMIN_PANEL_NAV_ITEMS: NavItem[] = [
+  {
+    id: "admin-overview",
+    labelKey: "adminWorkspace.tabs.overview",
+    icon: LayoutDashboard,
+  },
+  {
+    id: "admin-workspace",
+    labelKey: "adminWorkspace.tabs.workspace",
+    icon: Users,
+  },
+  {
+    id: "admin-billing",
+    labelKey: "adminWorkspace.tabs.billing",
+    icon: Receipt,
+  },
+  {
+    id: "admin-audit",
+    labelKey: "adminWorkspace.tabs.audit",
+    icon: FileText,
+  },
+  {
+    id: "admin-system",
+    labelKey: "adminWorkspace.tabs.system",
+    icon: Wrench,
+  },
+  {
+    id: "admin-analytics",
+    labelKey: "adminWorkspace.tabs.analytics",
+    icon: BarChart3,
+  },
+];
+
+function isAdminPanelSection(section: AppSection): boolean {
+  return section.startsWith("admin-");
+}
 
 type Props = {
   activeSection: AppSection;
@@ -113,6 +155,8 @@ export function AppSidebar({
 }: Props) {
   const { t } = useTranslation();
   const isPlatformAdmin = platformRole === "platform_admin";
+  const isTeamOperator = teamRole === "owner" || teamRole === "admin";
+  const inAdminPanel = isAdminPanelSection(activeSection);
   const roleLabel = isPlatformAdmin
     ? t("shell.roles.platform_admin")
     : teamRole
@@ -120,18 +164,37 @@ export function AppSidebar({
       : t("shell.roles.guest");
 
   const navItems = useMemo(() => {
-    const base = [...NAV_ITEMS];
+    if (inAdminPanel) {
+      if (isPlatformAdmin) {
+        return ADMIN_PANEL_NAV_ITEMS;
+      }
+      if (isTeamOperator) {
+        return ADMIN_PANEL_NAV_ITEMS.filter(
+          (item) =>
+            item.id === "admin-overview" ||
+            item.id === "admin-workspace" ||
+            item.id === "admin-system" ||
+            item.id === "admin-analytics",
+        );
+      }
+      return ADMIN_PANEL_NAV_ITEMS.filter(
+        (item) => item.id === "admin-overview" || item.id === "admin-workspace",
+      );
+    }
+
+    const base = [...APP_NAV_ITEMS];
     if (isAuthenticated) {
       base.splice(2, 0, BILLING_NAV_ITEM);
     }
-    const filtered = base.filter((item) =>
+    const filtered = base.filter(
+      (item) =>
       teamRole === "viewer" && item.id === "integrations" ? false : true,
     );
     if (showAdminSection) {
-      filtered.push(ADMIN_NAV_ITEM);
+      filtered.push(ADMIN_ENTRY_NAV_ITEM);
     }
     return filtered;
-  }, [isAuthenticated, showAdminSection, teamRole]);
+  }, [inAdminPanel, isAuthenticated, isPlatformAdmin, isTeamOperator, showAdminSection, teamRole]);
 
   const canSwitchWorkspace = workspaceOptions.length > 1 && Boolean(onWorkspaceChange);
   const selectedWorkspaceId = currentWorkspaceId ?? workspaceOptions[0]?.id ?? "default";
@@ -143,7 +206,14 @@ export function AppSidebar({
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
     const isActive = activeSection === item.id;
-    const isPlatformAdminItem = item.id === "admin" && isPlatformAdmin;
+    const isPlatformAdminItem =
+      isPlatformAdmin &&
+      (item.id === "admin-overview" ||
+        item.id === "admin-workspace" ||
+        item.id === "admin-billing" ||
+        item.id === "admin-audit" ||
+        item.id === "admin-system" ||
+        item.id === "admin-analytics");
 
     const button = (
       <button
@@ -154,7 +224,7 @@ export function AppSidebar({
           isActive
             ? "bg-muted text-foreground"
             : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-          isPlatformAdminItem && "border border-border bg-muted/60",
+          isPlatformAdminItem && "border border-border bg-muted/60 shadow-[inset_0_0_0_1px_var(--border)]",
           collapsed && "justify-center px-0",
         )}
       >
@@ -201,13 +271,11 @@ export function AppSidebar({
         style={{ height: "var(--window-titlebar-height)" }}
       />
 
-      <div
-        className="shrink-0 border-b border-border"
-      >
+      <div className="shrink-0 border-b border-border">
         <div
           className={cn(
             "flex h-11 items-center",
-            collapsed ? "gap-1 px-2" : "gap-1 px-3",
+            collapsed ? "gap-1 px-2" : "gap-2 px-2.5",
           )}
         >
           {collapsed ? (
@@ -248,10 +316,69 @@ export function AppSidebar({
               <button
                 type="button"
                 onClick={() => onSectionChange("profiles")}
-                className="flex min-w-0 flex-1 items-center rounded-md px-1 py-1.5 text-left transition-colors hover:bg-muted/50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted/60"
               >
-                <Logo variant="full" className="h-7 max-w-[148px]" />
+                <Logo variant="icon" className="h-8 w-8 rounded-md" />
               </button>
+
+              {isAuthenticated && workspaceOptions.length > 0 ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={!canSwitchWorkspace}
+                      className={cn(
+                        "flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5 text-left transition-colors",
+                        canSwitchWorkspace
+                          ? "hover:bg-muted/70"
+                          : "cursor-default opacity-85",
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-semibold text-foreground">
+                          {selectedWorkspace?.label ??
+                            t("shell.workspaceSwitcher.placeholder")}
+                        </p>
+                        <p className="truncate text-[10px] font-medium text-muted-foreground">
+                          {inAdminPanel
+                            ? t("shell.sections.adminPanel")
+                            : roleLabel}
+                        </p>
+                      </div>
+                      {isPlatformAdmin && (
+                        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[260px]">
+                    <DropdownMenuLabel>
+                      {t("shell.workspaceSwitcher.label")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {workspaceOptions.map((workspace, index) => (
+                      <DropdownMenuItem
+                        key={workspace.id}
+                        onClick={() => onWorkspaceChange?.(workspace.id)}
+                        disabled={!canSwitchWorkspace}
+                      >
+                        <span className="truncate">{workspace.label}</span>
+                        <DropdownMenuShortcut>{index + 1}</DropdownMenuShortcut>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-semibold text-foreground">
+                    BugLogin
+                  </p>
+                  <p className="truncate text-[10px] font-medium text-muted-foreground">
+                    {t("shell.auth.disconnected")}
+                  </p>
+                </div>
+              )}
+
               {onCollapsedChange && (
                 <button
                   type="button"
@@ -265,54 +392,6 @@ export function AppSidebar({
             </>
           )}
         </div>
-
-        {!collapsed && isAuthenticated && workspaceOptions.length > 0 && (
-          <div className="px-3 pb-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={!canSwitchWorkspace}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-lg border border-border bg-muted px-2 py-2 text-left transition-colors",
-                    canSwitchWorkspace ? "hover:bg-muted/70" : "cursor-default opacity-85",
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-semibold text-foreground">
-                      {selectedWorkspace?.label ?? t("shell.workspaceSwitcher.placeholder")}
-                    </p>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      <p className="truncate text-[10px] font-medium text-muted-foreground">
-                        {roleLabel}
-                      </p>
-                      {isPlatformAdmin && (
-                        <span className="rounded-md border border-border bg-background px-1 py-0.5 text-[9px] font-semibold text-foreground">
-                          {t("shell.roles.platform_admin_short")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[260px]">
-                <DropdownMenuLabel>{t("shell.workspaceSwitcher.label")}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {workspaceOptions.map((workspace, index) => (
-                  <DropdownMenuItem
-                    key={workspace.id}
-                    onClick={() => onWorkspaceChange?.(workspace.id)}
-                    disabled={!canSwitchWorkspace}
-                  >
-                    <span className="truncate">{workspace.label}</span>
-                    <DropdownMenuShortcut>{index + 1}</DropdownMenuShortcut>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
       </div>
 
       {/* ── Navigation ── */}

@@ -33,6 +33,7 @@ interface PlatformAdminWorkspaceProps {
   entitlement: EntitlementSnapshot | null;
   platformRole?: string;
   teamRole?: TeamRole | null;
+  sidebarTab?: AdminTab;
 }
 
 type AdminTab =
@@ -52,6 +53,7 @@ export function PlatformAdminWorkspace({
   entitlement,
   platformRole,
   teamRole,
+  sidebarTab,
 }: PlatformAdminWorkspaceProps) {
   const { t } = useTranslation();
   const [reason, setReason] = useState("");
@@ -124,13 +126,26 @@ export function PlatformAdminWorkspace({
     }
     return ["overview", "workspace"];
   }, [isPlatformAdmin, isTeamOperator]);
-  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [internalActiveTab, setInternalActiveTab] = useState<AdminTab>("overview");
+  const showInternalNavigation = !sidebarTab;
+  const activeTab = useMemo<AdminTab>(() => {
+    if (sidebarTab && availableTabs.includes(sidebarTab)) {
+      return sidebarTab;
+    }
+    if (availableTabs.includes(internalActiveTab)) {
+      return internalActiveTab;
+    }
+    return availableTabs[0];
+  }, [availableTabs, internalActiveTab, sidebarTab]);
 
   useEffect(() => {
-    if (!availableTabs.includes(activeTab)) {
-      setActiveTab(availableTabs[0]);
+    if (!showInternalNavigation) {
+      return;
     }
-  }, [activeTab, availableTabs]);
+    if (!availableTabs.includes(internalActiveTab)) {
+      setInternalActiveTab(availableTabs[0]);
+    }
+  }, [availableTabs, internalActiveTab, showInternalNavigation]);
 
   useEffect(() => {
     const nextDrafts: Record<string, TeamRole> = {};
@@ -448,66 +463,74 @@ export function PlatformAdminWorkspace({
     <Tabs
       value={activeTab}
       onValueChange={(value) => {
-        setActiveTab(value as AdminTab);
+        if (showInternalNavigation) {
+          setInternalActiveTab(value as AdminTab);
+        }
       }}
-      className="grid gap-4 xl:grid-cols-[230px_minmax(0,1fr)]"
+      className={
+        showInternalNavigation
+          ? "grid gap-4 xl:grid-cols-[230px_minmax(0,1fr)]"
+          : "space-y-4"
+      }
     >
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle>{t("shell.sections.admin")}</CardTitle>
-          <CardDescription>{t("adminWorkspace.subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <TabsList className="grid h-auto w-full gap-1 bg-transparent p-0">
-            {availableTabs.includes("overview") && (
-              <TabsTrigger value="overview" className="justify-start gap-2">
-                <BarChart3 className="h-4 w-4" />
-                {t("adminWorkspace.tabs.overview")}
-              </TabsTrigger>
-            )}
-            {availableTabs.includes("workspace") && (
-              <TabsTrigger value="workspace" className="justify-start gap-2">
-                <Users className="h-4 w-4" />
-                {t("adminWorkspace.tabs.workspace")}
-              </TabsTrigger>
-            )}
-            {availableTabs.includes("billing") && (
-              <TabsTrigger value="billing" className="justify-start gap-2">
-                <CreditCard className="h-4 w-4" />
-                {t("adminWorkspace.tabs.billing")}
-              </TabsTrigger>
-            )}
-            {availableTabs.includes("audit") && (
-              <TabsTrigger value="audit" className="justify-start gap-2">
-                <FileText className="h-4 w-4" />
-                {t("adminWorkspace.tabs.audit")}
-              </TabsTrigger>
-            )}
-            {availableTabs.includes("system") && (
-              <TabsTrigger value="system" className="justify-start gap-2">
-                <ShieldCheck className="h-4 w-4" />
-                {t("adminWorkspace.tabs.system")}
-              </TabsTrigger>
-            )}
-            {availableTabs.includes("analytics") && (
-              <TabsTrigger value="analytics" className="justify-start gap-2">
-                <BarChart3 className="h-4 w-4" />
-                {t("adminWorkspace.tabs.analytics")}
-              </TabsTrigger>
-            )}
-          </TabsList>
+      {showInternalNavigation && (
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle>{t("shell.sections.adminPanel")}</CardTitle>
+            <CardDescription>{t("adminWorkspace.subtitle")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <TabsList className="grid h-auto w-full gap-1 bg-transparent p-0">
+              {availableTabs.includes("overview") && (
+                <TabsTrigger value="overview" className="justify-start gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  {t("adminWorkspace.tabs.overview")}
+                </TabsTrigger>
+              )}
+              {availableTabs.includes("workspace") && (
+                <TabsTrigger value="workspace" className="justify-start gap-2">
+                  <Users className="h-4 w-4" />
+                  {t("adminWorkspace.tabs.workspace")}
+                </TabsTrigger>
+              )}
+              {availableTabs.includes("billing") && (
+                <TabsTrigger value="billing" className="justify-start gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  {t("adminWorkspace.tabs.billing")}
+                </TabsTrigger>
+              )}
+              {availableTabs.includes("audit") && (
+                <TabsTrigger value="audit" className="justify-start gap-2">
+                  <FileText className="h-4 w-4" />
+                  {t("adminWorkspace.tabs.audit")}
+                </TabsTrigger>
+              )}
+              {availableTabs.includes("system") && (
+                <TabsTrigger value="system" className="justify-start gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  {t("adminWorkspace.tabs.system")}
+                </TabsTrigger>
+              )}
+              {availableTabs.includes("analytics") && (
+                <TabsTrigger value="analytics" className="justify-start gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  {t("adminWorkspace.tabs.analytics")}
+                </TabsTrigger>
+              )}
+            </TabsList>
 
-          <div className="rounded-md border border-border bg-muted px-3 py-2">
-            <p className="text-xs font-medium text-foreground">
-              {t("adminWorkspace.controlPlane.workspaceList")}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {selectedWorkspace?.name ??
-                t("adminWorkspace.controlPlane.noWorkspaceSelected")}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="rounded-md border border-border bg-muted px-3 py-2">
+              <p className="text-xs font-medium text-foreground">
+                {t("adminWorkspace.controlPlane.workspaceList")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {selectedWorkspace?.name ??
+                  t("adminWorkspace.controlPlane.noWorkspaceSelected")}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="space-y-4">
         <Card>

@@ -830,4 +830,9 @@ export type AppSection =
   | "billing"
   | "settings"
   | "integrations"
-  | "admin";
+  | "admin-overview"
+  | "admin-workspace"
+  | "admin-billing"
+  | "admin-audit"
+  | "admin-system"
+  | "admin-analytics";

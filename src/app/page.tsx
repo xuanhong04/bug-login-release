@@ -396,13 +396,24 @@ export default function Home() {
   }, [runtimeConfig, t]);
 
   useEffect(() => {
-    if (activeSection === "admin" && !canAccessAdminWorkspace) {
+    if (activeSection.startsWith("admin-") && !canAccessAdminWorkspace) {
       setActiveSection("profiles");
       showErrorToast(t("adminWorkspace.noAccessTitle"), {
         description: t("adminWorkspace.noAccessDescription"),
       });
     }
   }, [activeSection, canAccessAdminWorkspace, t]);
+
+  useEffect(() => {
+    const isPlatformOnlySection =
+      activeSection === "admin-billing" || activeSection === "admin-audit";
+    if (isPlatformOnlySection && cloudUser?.platformRole !== "platform_admin") {
+      setActiveSection("admin-overview");
+      showErrorToast(t("adminWorkspace.noAccessTitle"), {
+        description: t("adminWorkspace.noAccessDescription"),
+      });
+    }
+  }, [activeSection, cloudUser?.platformRole, t]);
 
   useEffect(() => {
     if (workspaceOptions.length === 0) {
@@ -1543,16 +1554,30 @@ export default function Home() {
               entitlement={entitlement}
               user={cloudUser!}
               teamRole={teamRole}
-              onOpenAdminWorkspace={() => setActiveSection("admin")}
+              onOpenAdminWorkspace={() => setActiveSection("admin-overview")}
               onOpenSyncConfig={() => setSyncConfigDialogOpen(true)}
             />
           </WorkspacePageShell>
         );
-      case "admin":
+      case "admin-overview":
+      case "admin-workspace":
+      case "admin-billing":
+      case "admin-audit":
+      case "admin-system":
+      case "admin-analytics":
+        const adminSectionToTab = {
+          "admin-overview": "overview",
+          "admin-workspace": "workspace",
+          "admin-billing": "billing",
+          "admin-audit": "audit",
+          "admin-system": "system",
+          "admin-analytics": "analytics",
+        } as const;
+        const adminTab = adminSectionToTab[activeSection];
         if (!canAccessAdminWorkspace) {
           return (
             <WorkspacePageShell
-              title={t("shell.sections.admin")}
+              title={t("shell.sections.adminPanel")}
               description={t("adminWorkspace.noAccessDescription")}
               contentClassName="max-w-none space-y-4 pb-0"
             >
@@ -1564,7 +1589,7 @@ export default function Home() {
         }
         return (
           <WorkspacePageShell
-            title={t("shell.sections.admin")}
+            title={t(`adminWorkspace.tabs.${adminTab}`)}
             description={t("adminWorkspace.subtitle")}
             contentClassName="max-w-none space-y-4 pb-0"
           >
@@ -1573,6 +1598,7 @@ export default function Home() {
               entitlement={entitlement}
               platformRole={cloudUser?.platformRole}
               teamRole={teamRole}
+              sidebarTab={adminTab}
             />
           </WorkspacePageShell>
         );
