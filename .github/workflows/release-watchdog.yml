@@ -18,7 +18,6 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const core = require("@actions/core");
             const { owner, repo } = context.repo;
 
             const runsResp = await github.rest.actions.listWorkflowRuns({
@@ -92,7 +91,6 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const core = require("@actions/core");
             const { owner, repo } = context.repo;
             const runId = Number("${{ steps.inspect.outputs.run_id }}");
 
