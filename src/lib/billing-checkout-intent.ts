@@ -11,7 +11,12 @@ export interface BillingCheckoutIntent {
   couponDiscountPercent?: number | null;
   checkoutStartedAt?: string | null;
   checkoutCompletedAt?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  checkoutAmountUsd?: number | null;
+  prorationCreditUsd?: number | null;
+  prorationRemainingDays?: number | null;
   activationMethod?: "stripe" | "coupon" | "license" | null;
+  autoStartStripeCheckout?: boolean;
 }
 
 const BILLING_CHECKOUT_INTENT_KEY = "buglogin.billing.checkout-intent.v1";
@@ -46,7 +51,21 @@ export function readBillingCheckoutIntent(): BillingCheckoutIntent | null {
           : null,
       checkoutStartedAt: parsed.checkoutStartedAt ?? null,
       checkoutCompletedAt: parsed.checkoutCompletedAt ?? null,
+      stripeCheckoutSessionId: parsed.stripeCheckoutSessionId ?? null,
+      checkoutAmountUsd:
+        typeof parsed.checkoutAmountUsd === "number"
+          ? parsed.checkoutAmountUsd
+          : null,
+      prorationCreditUsd:
+        typeof parsed.prorationCreditUsd === "number"
+          ? parsed.prorationCreditUsd
+          : null,
+      prorationRemainingDays:
+        typeof parsed.prorationRemainingDays === "number"
+          ? parsed.prorationRemainingDays
+          : null,
       activationMethod: parsed.activationMethod ?? null,
+      autoStartStripeCheckout: Boolean(parsed.autoStartStripeCheckout),
     };
   } catch {
     return null;

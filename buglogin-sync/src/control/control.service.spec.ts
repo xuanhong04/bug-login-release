@@ -1,4 +1,5 @@
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import { scryptSync } from "node:crypto";
 import { ControlService } from "./control.service.js";
 
 describe("ControlService", () => {
@@ -52,8 +53,8 @@ describe("ControlService", () => {
 
     const invite = service.createInvite(
       workspace.id,
-      "admin@buglogin.local",
-      "admin",
+      "member-upgrade@buglogin.local",
+      "member",
       {
         userId: "owner-1",
         email: "owner@buglogin.local",
@@ -62,24 +63,52 @@ describe("ControlService", () => {
     );
 
     service.acceptInvite(invite.token, {
-      userId: "admin-1",
-      email: "admin@buglogin.local",
+      userId: "member-1",
+      email: "member-upgrade@buglogin.local",
       platformRole: null,
     });
 
     expect(() =>
       service.updateMembershipRole(
         workspace.id,
-        "admin-1",
+        "member-1",
         "owner",
         {
-          userId: "admin-1",
-          email: "admin@buglogin.local",
+          userId: "member-1",
+          email: "member-upgrade@buglogin.local",
           platformRole: null,
         },
         "promote self",
       ),
     ).toThrow(UnauthorizedException);
+  });
+
+  it("rejects inviting owner/admin roles directly", () => {
+    const workspace = service.createWorkspace(
+      {
+        userId: "owner-1",
+        email: "owner@buglogin.local",
+        platformRole: "platform_admin",
+      },
+      "Workspace F",
+      "team",
+    );
+
+    expect(() =>
+      service.createInvite(workspace.id, "owner-invite@buglogin.local", "owner", {
+        userId: "owner-1",
+        email: "owner@buglogin.local",
+        platformRole: "platform_admin",
+      }),
+    ).toThrow(BadRequestException);
+
+    expect(() =>
+      service.createInvite(workspace.id, "admin-invite@buglogin.local", "admin", {
+        userId: "owner-1",
+        email: "owner@buglogin.local",
+        platformRole: "platform_admin",
+      }),
+    ).toThrow(BadRequestException);
   });
 
   it("accepts expired invite when actor email matches exactly", () => {
@@ -197,5 +226,96 @@ describe("ControlService", () => {
 
     const overview = service.getWorkspaceOverview(workspace.id, platformAdminActor);
     expect(overview.workspaceId).toBe(workspace.id);
+  });
+
+  it("registers and logs in using persisted password credentials", () => {
+    const registered = service.registerAuthUser(
+      "auth-user@buglogin.local",
+      "Password123!",
+    );
+    expect(registered.user.email).toBe("auth-user@buglogin.local");
+
+    const loggedIn = service.loginAuthUser("auth-user@buglogin.local", "Password123!");
+    expect(loggedIn.user.id).toBe(registered.user.id);
+
+    expect(() =>
+      service.loginAuthUser("auth-user@buglogin.local", "wrong-password"),
+    ).toThrow(UnauthorizedException);
+  });
+
+  it("grants platform_admin to the first registered local account", () => {
+    const firstUser = service.registerAuthUser(
+      "first-admin@buglogin.local",
+      "Password123!",
+    );
+    const secondUser = service.registerAuthUser(
+      "second-user@buglogin.local",
+      "Password123!",
+    );
+
+    expect(firstUser.user.platformRole).toBe("platform_admin");
+    expect(secondUser.user.platformRole).toBeNull();
+  });
+
+  it("migrates legacy auth userId on login and keeps workspace visibility", () => {
+    const email = "legacy-user@buglogin.local";
+    const password = "Password123!";
+    const legacyUserId = "legacy-user-id";
+    const now = new Date().toISOString();
+    const passwordSalt = "legacy-salt";
+    const passwordHash = scryptSync(password, passwordSalt, 64).toString("hex");
+
+    const workspace = service.createWorkspace(
+      {
+        userId: legacyUserId,
+        email,
+        platformRole: null,
+      },
+      "Legacy Workspace",
+      "team",
+    );
+
+    (
+      service as unknown as {
+        authUsers: Map<
+          string,
+          {
+            userId: string;
+            email: string;
+            passwordSalt: string;
+            passwordHash: string;
+            platformRole: "platform_admin" | null;
+            createdAt: string;
+            updatedAt: string;
+          }
+        >;
+      }
+    ).authUsers.set(email, {
+      userId: legacyUserId,
+      email,
+      passwordSalt,
+      passwordHash,
+      platformRole: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const loggedIn = service.loginAuthUser(email, password);
+    expect(loggedIn.user.id).not.toBe(legacyUserId);
+
+    const workspaces = service.listWorkspaces({
+      userId: loggedIn.user.id,
+      email,
+      platformRole: null,
+    });
+    expect(workspaces.map((item) => item.id)).toContain(workspace.id);
+
+    const members = service.listMemberships(workspace.id, {
+      userId: loggedIn.user.id,
+      email,
+      platformRole: null,
+    });
+    expect(members.some((member) => member.userId === loggedIn.user.id)).toBe(true);
+    expect(members.some((member) => member.userId === legacyUserId)).toBe(false);
   });
 });
