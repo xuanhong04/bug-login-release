@@ -47,6 +47,11 @@
       "rpm": {
         "desktopTemplate": "buglogin.desktop",
         "depends": ["xdg-utils"]
+      },
+      "appimage": {
+        "files": {
+          "usr/share/applications/BugLogin.desktop": "buglogin-appimage.desktop"
+        }
       }
     },
     "windows": {

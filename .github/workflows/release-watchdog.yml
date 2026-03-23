@@ -1,0 +1,104 @@
+name: Release Watchdog
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  retry-until-green:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect latest tag release run
+        id: inspect
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const core = require("@actions/core");
+            const { owner, repo } = context.repo;
+
+            const runsResp = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "release.yml",
+              event: "push",
+              per_page: 20
+            });
+
+            const taggedRuns = runsResp.data.workflow_runs.filter((run) =>
+              /^v\d+\.\d+\.\d+/.test(run.head_branch || "")
+            );
+
+            if (taggedRuns.length === 0) {
+              core.notice("No tagged release run found.");
+              core.setOutput("should_rerun", "false");
+              return;
+            }
+
+            const latest = taggedRuns[0];
+            core.setOutput("run_id", String(latest.id));
+            core.setOutput("head_branch", latest.head_branch || "");
+            core.setOutput("status", latest.status || "");
+            core.setOutput("conclusion", latest.conclusion || "");
+
+            core.notice(
+              `Latest tag run: #${latest.id} (${latest.head_branch}) status=${latest.status} conclusion=${latest.conclusion}`
+            );
+
+            if (latest.status !== "completed") {
+              core.notice("Latest run is still in progress. Skip rerun.");
+              core.setOutput("should_rerun", "false");
+              return;
+            }
+
+            const jobsResp = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: latest.id,
+              per_page: 100
+            });
+
+            const releaseJobs = jobsResp.data.jobs.filter((job) =>
+              job.name.startsWith("release (")
+            );
+
+            const successCount = releaseJobs.filter((job) => job.conclusion === "success").length;
+            const failedCount = releaseJobs.filter((job) =>
+              ["failure", "cancelled", "timed_out", "action_required"].includes(job.conclusion || "")
+            ).length;
+
+            core.notice(`Release jobs: total=${releaseJobs.length}, success=${successCount}, failed=${failedCount}`);
+
+            const allDone = latest.conclusion === "success" && successCount >= 3;
+            if (allDone) {
+              core.notice("All 3 release targets are done. No rerun needed.");
+              core.setOutput("should_rerun", "false");
+              return;
+            }
+
+            if (failedCount > 0) {
+              core.setOutput("should_rerun", "true");
+            } else {
+              core.notice("No failed release job to rerun.");
+              core.setOutput("should_rerun", "false");
+            }
+
+      - name: Rerun failed jobs
+        if: steps.inspect.outputs.should_rerun == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const core = require("@actions/core");
+            const { owner, repo } = context.repo;
+            const runId = Number("${{ steps.inspect.outputs.run_id }}");
+
+            await github.request(
+              "POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs",
+              { owner, repo, run_id: runId }
+            );
+
+            core.notice(`Triggered rerun-failed-jobs for run #${runId}.`);
