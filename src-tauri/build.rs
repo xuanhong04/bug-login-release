@@ -82,7 +82,9 @@ fn main() {
       println!("cargo:rustc-link-arg-bins=/MANIFEST:NO");
     }
   } else {
-    println!("cargo:warning=Skipping tauri_build: external binaries not found. This is expected when building sidecar binaries.");
+    if !is_sidecar_build() {
+      println!("cargo:warning=Skipping tauri_build: external binaries not found. This is expected when building sidecar binaries.");
+    }
 
     #[cfg(target_os = "windows")]
     embed_windows_manifest();
@@ -125,6 +127,10 @@ fn stop_locked_dev_binaries() {
 
 fn is_clippy_build() -> bool {
   std::env::var_os("CARGO_CFG_CLIPPY").is_some() || std::env::var_os("CLIPPY_ARGS").is_some()
+}
+
+fn is_sidecar_build() -> bool {
+  std::env::var_os("BUGLOGIN_SIDECAR_BUILD").is_some()
 }
 
 fn external_binaries_exist() -> bool {

@@ -141,6 +141,7 @@ impl DownloadedBrowsersRegistry {
       .unwrap_or_default()
   }
 
+  #[cfg(target_os = "windows")]
   pub fn list_registered_browser_versions(&self) -> Vec<(String, String)> {
     let data = self.data.lock().unwrap();
     data

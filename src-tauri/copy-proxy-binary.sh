@@ -88,7 +88,7 @@ copy_binary() {
     if [[ -n "$TARGET" ]] && [[ "$TARGET" != "unknown" ]] && [[ "$TARGET" != "$HOST_TARGET" ]]; then
       BUILD_ARGS+=("--target" "$TARGET")
     fi
-    cargo "${BUILD_ARGS[@]}"
+    BUGLOGIN_SIDECAR_BUILD=1 cargo "${BUILD_ARGS[@]}"
     if [[ -f "$SOURCE" ]]; then
       cp "$SOURCE" "$DEST"
       echo "Built and copied $BIN_NAME to $DEST"

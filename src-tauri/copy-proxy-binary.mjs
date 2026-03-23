@@ -167,6 +167,7 @@ function buildBinary(baseName) {
   const buildEnv = {
     ...process.env,
     CARGO_TARGET_DIR,
+    BUGLOGIN_SIDECAR_BUILD: "1",
   };
 
   if (isWindows && existsSync(VCVARS64_PATH)) {
