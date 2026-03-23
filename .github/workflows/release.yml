@@ -18,23 +18,25 @@ jobs:
   build-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with:
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
           cache: "pnpm"
       - name: Install & Build Frontend
         run: |
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile --prefer-offline
           pnpm exec next build
       - name: Upload Frontend Dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: dist # Chỉnh lại thành dist hoặc .next tùy cấu hình của bạn
+          if-no-files-found: error
+          compression-level: 0
 
   # JOB 2: Đóng gói đa nền tảng
   release:
@@ -57,11 +59,11 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Tải về kết quả build Frontend đã làm xong ở máy bên kia
       - name: Download Frontend Dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: dist
@@ -72,7 +74,7 @@ jobs:
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
           cache: "pnpm"
@@ -96,7 +98,7 @@ jobs:
           shared-key: "buglogin-release-cache"
 
       - name: Install dependencies (No Build Frontend)
-        run: pnpm install --frozen-lockfile --ignore-scripts # Bỏ qua script build vì đã có artifact rồi
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline # Bỏ qua script build vì đã có artifact rồi
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
