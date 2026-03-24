@@ -103,7 +103,7 @@ jobs:
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT != '' && secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           TARGET: ${{ matrix.target }}
           PROFILE: release
         with:
@@ -119,7 +119,7 @@ jobs:
       - name: Zip and Upload MacOS App (Anti-Gatekeeper)
         if: matrix.platform == 'macos-latest'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT != '' && secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos/

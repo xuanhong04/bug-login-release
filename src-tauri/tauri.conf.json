@@ -50,7 +50,17 @@
       },
       "appimage": {
         "files": {
-          "usr/share/applications/BugLogin.desktop": "buglogin-appimage.desktop"
+          "usr/share/applications/BugLogin.desktop": "buglogin-appimage.desktop",
+          "usr/share/icons/hicolor/32x32/apps/buglogin.png": "icons/32x32.png",
+          "usr/share/icons/hicolor/128x128/apps/buglogin.png": "icons/128x128.png",
+          "usr/share/icons/hicolor/256x256/apps/buglogin.png": "icons/128x128@2x.png",
+          "usr/share/icons/hicolor/512x512/apps/buglogin.png": "icons/icon.png",
+          "usr/share/icons/hicolor/32x32/apps/BugLogin.png": "icons/32x32.png",
+          "usr/share/icons/hicolor/128x128/apps/BugLogin.png": "icons/128x128.png",
+          "usr/share/icons/hicolor/256x256/apps/BugLogin.png": "icons/128x128@2x.png",
+          "usr/share/icons/hicolor/512x512/apps/BugLogin.png": "icons/icon.png",
+          "usr/share/pixmaps/buglogin.png": "icons/icon.png",
+          "usr/share/pixmaps/BugLogin.png": "icons/icon.png"
         }
       }
     },
